@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+from data import DataSet
 
 
 class BasicLSTMModel(object):
@@ -23,21 +24,23 @@ class BasicLSTMModel(object):
         self._batch_size = batch_size
         self._output_n_epoch = output_n_epoch
         self._lstm_size = lstm_size
+        self._time_steps = time_steps
 
         with tf.variable_scope(self._name):
             self._x = tf.placeholder(tf.float32, [None, time_steps, num_features], 'input')
             self._y = tf.placeholder(tf.float32, [None, n_output], 'label')
 
+            self._sess = tf.Session()  # 会话
+
             self._hidden_layer()
 
             self._output = tf.contrib.layers.fully_connected(self._hidden_rep, n_output,
                                                              activation_fn=tf.identity)  # 输出层
-            self._pred = tf.nn.softmax(self._output, name="pred")
+            self._pred = tf.nn.sigmoid(self._output, name="pred")
 
-            self._loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(self._y, self._output), name='loss')
+            self._loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self._y, logits=self._output),
+                                        name='loss')
             self._train_op = optimizer.minimize(self._loss)
-
-            self._sess = tf.Session()  # 会话
 
     def _hidden_layer(self):
         lstm = tf.contrib.rnn.BasicLSTMCell(self._lstm_size)  # ??????
@@ -102,19 +105,20 @@ class BidirectionalLSTMModel(BasicLSTMModel):
                                                                            (1, self._lstm_size * 2))
 
 
-class BiLSTMWithAttention(BasicLSTMModel):
+class CA_RNN(BasicLSTMModel):
     def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
                  optimizer=tf.train.AdamOptimizer(), name="BiLSTMWithAttention"):
         super().__init__(num_features, time_steps, lstm_size, n_output, batch_size, epochs, output_n_epoch, optimizer,
                          name)
-        self._time_steps = time_steps
-        self._W_trans = tf.Variable(tf.truncated_normal([10, 100], stddev=0.1))
+        with tf.variable_scope(self._name):
+            self._W_trans = tf.Variable(tf.truncated_normal([10, 100], stddev=0.1))
 
-    def _attention(self):
-        word_embedding_matrix = np.zeros([self._x.shape[0], self._time_steps + 10, 100], dtype=np.float32)
-        word_embedding_matrix[:, 5:self._time_steps + 5, :] = self._x.reshape([-1, self._time_steps, 100])
-        context_embedding_matrix = np.zeros([self._x.shape[0], self._time_steps, 100])
-        for j in range(self._x.shape[0]):
+    def _attention(self, dataset):
+        x = dataset.dynamic_feature
+        word_embedding_matrix = np.zeros([x.shape[0], self._time_steps + 10, 100], dtype=np.float32)
+        word_embedding_matrix[:, 5:self._time_steps + 5, :] = x.reshape([-1, self._time_steps, 100])
+        context_embedding_matrix = np.zeros([x.shape[0], self._time_steps, 100])
+        for j in range(x.shape[0]):
             for k in range(self._time_steps):
                 words_2n = np.zeros([10, 100], dtype=np.float32)
                 word_k = word_embedding_matrix[j, k + 5, :].astype(np.float32)
@@ -131,20 +135,19 @@ class BiLSTMWithAttention(BasicLSTMModel):
                 context_embedding_matrix[j, k, :] = context_embedding
         return context_embedding_matrix
 
-    def _hidden_layer(self):
-        self._lstm = {}
-        self._init_state = {}
-        for direction in ['forward', 'backward']:
-            self._lstm[direction] = tf.contrib.rnn.BasicLSTMCell(self._lstm_size)
-            self._init_state[direction] = self._lstm[direction].zero_state(tf.shape(self._x)[0], tf.float32)
+    def fit(self, data_set):
+        self._sess.run(tf.global_variables_initializer())
+        data_set.epoch_completed = 0
+        data_set = DataSet(self._attention(data_set), data_set.labels)
 
-        mask, length = self._length()
-        self._hidden, _ = tf.nn.bidirectional_dynamic_rnn(self._lstm['forward'],
-                                                          self._lstm['backward'],
-                                                          self._attention(),
-                                                          sequence_length=length,
-                                                          initial_state_fw=self._init_state['forward'],
-                                                          initial_state_bw=self._init_state['backward'])
-        self._hidden_concat = tf.concat(self._hidden, axis=2)  # n_samples×time_steps×2lstm_size→n_samples×2lstm_size
-        self._hidden_rep = tf.reduce_sum(self._hidden_concat, 1) / tf.tile(tf.reduce_sum(mask, 1, keepdims=True),
-                                                                           (1, self._lstm_size * 2))
+        logged = set()
+        while data_set.epoch_completed < self._epochs:
+            dynamic_feature, labels = data_set.next_batch(self._batch_size)
+            self._sess.run(self._train_op, feed_dict={self._x: dynamic_feature,
+                                                      self._y: labels})
+
+            if data_set.epoch_completed % self._output_n_epoch == 0 and data_set.epoch_completed not in logged:
+                logged.add(data_set.epoch_completed)
+                loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
+                                                             self._y: data_set.labels})
+                print("loss of epoch {} is {}".format(data_set.epoch_completed, loss))

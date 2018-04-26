@@ -7,21 +7,19 @@ from sklearn.model_selection import StratifiedShuffleSplit  # 创建随机数并
 import tensorflow as tf
 
 from data import read_data, DataSet
-from models import BasicLSTMModel, BidirectionalLSTMModel
+from models import BidirectionalLSTMModel, CA_RNN
 
 
 class ExperimentSetup(object):
     kfold = 5
     test_size = 1 / kfold
     train_size = 1 - test_size
-    batch_size = 64
-    random_state = 1
+    batch_size = 1769
 
-    lstm_size = 200
+    lstm_size = 80
     learning_rate = 0.0001
-    epochs = 1000
-    output_n_epochs = 20
-    data_source = "lu"
+    epochs = 10
+    output_n_epochs = 1
 
 
 def evaluate(tol_label, tol_pred, result_file='resources/save/evaluation_result.csv'):
@@ -121,7 +119,27 @@ def bidirectional_lstm_model_experiments(result_file):
     return model_experiments(model, data_set, result_file)
 
 
+def CA_RNN_experiments(result_file):
+    data_set = read_data()
+    dynamic_feature = data_set.dynamic_feature
+    labels = data_set.labels
+
+    num_features = dynamic_feature.shape[2]
+    time_steps = dynamic_feature.shape[1]
+    n_output = labels.shape[1]
+
+    model = CA_RNN(num_features,
+                   time_steps,
+                   ExperimentSetup.lstm_size,
+                   n_output,
+                   batch_size=ExperimentSetup.batch_size,
+                   epochs=ExperimentSetup.epochs,
+                   output_n_epoch=ExperimentSetup.output_n_epochs)
+    return model_experiments(model, data_set, result_file)
+
+
 if __name__ == '__main__':
     # basic_lstm_model_experiments('resources/save/basic_lstm.csv')
 
-    bidirectional_lstm_model_experiments('resources/save/bidirectional_lstm.csv')
+    bidirectional_lstm_model_experiments('save/bidirectional_lstm.csv')
+    CA_RNN_experiments('save/ca_rnn.csv')
