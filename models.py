@@ -51,7 +51,7 @@ class BasicLSTMModel(object):
                                             self._x,
                                             sequence_length=length,
                                             initial_state=init_state)
-        self._hidden_rep = tf.reduce_sum(self._hidden, 1) / tf.tile(tf.reduce_sum(mask, 1, keepdims=True),
+        self._hidden_rep = tf.reduce_sum(self._hidden, 1) / tf.tile(tf.reduce_sum(mask, 1, keep_dims=True),
                                                                     (1, self._lstm_size))
 
     def _length(self):
@@ -141,6 +141,7 @@ class CA_RNN(BasicLSTMModel):
         data_set = DataSet(self._attention(data_set), data_set.labels)
 
         logged = set()
+        # TODO 迭代停止条件改写， 若试参可逐步显示各指标
         while data_set.epoch_completed < self._epochs:
             dynamic_feature, labels = data_set.next_batch(self._batch_size)
             self._sess.run(self._train_op, feed_dict={self._x: dynamic_feature,
