@@ -8,3 +8,6 @@ save/
 
 result_*/
 
+.swp
+
+*.pkl

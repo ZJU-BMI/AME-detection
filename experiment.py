@@ -10,16 +10,16 @@ import numpy as np
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, roc_curve  # roc计算曲线
 
 from data import read_data, DataSet
-from models import BidirectionalLSTMModel, CA_RNN
+from models import BidirectionalLSTMModel, CA_RNN, LogisticRegression, MultiLayerPerceptron
 
 
 class ExperimentSetup(object):
     kfold = 5
     batch_size = 64
 
-    lstm_size = 80
+    lstm_size = 128
     learning_rate = 0.0001
-    epochs = 1
+    epochs = 20
     output_n_epochs = 1
 
 
@@ -104,7 +104,7 @@ def model_experiments(model, data_set, filename):
 
     tol_pred = np.zeros(shape=(0, n_output))
     tol_label = np.zeros(shape=(0, n_output), dtype=np.int32)
-
+    i = 1
     for train_idx, test_idx in kf.split(X=data_set.dynamic_feature, y=data_set.labels):  # 五折交叉
         train_dynamic = dynamic_feature[train_idx]
         train_y = labels[train_idx]
@@ -121,7 +121,8 @@ def model_experiments(model, data_set, filename):
         y_score = model.predict(test_set)
         tol_pred = np.vstack((tol_pred, y_score))
         tol_label = np.vstack((tol_label, test_y))
-
+        print("Cross validation: {} of {}".format(i, ExperimentSetup.kfold))
+        i += 1
     return evaluate(tol_label, tol_pred, filename)
 
 
@@ -180,10 +181,57 @@ def CA_RNN_experiments(event_type):
 
     if not os.path.exists("result_" + event_type):
         os.makedirs("result_" + event_type)
-    filename = "result_" + event_type + "/Bi-LSTM " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+    filename = "result_" + event_type + "/CA-RNN " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+    return model_experiments(model, data_set, filename)
+
+
+def logistic_regression_experiments(event_type):
+    data_set = read_data()
+    dynamic_feature = data_set.dynamic_feature
+    labels = data_set.labels
+
+    num_features = dynamic_feature.shape[2]
+    time_steps = dynamic_feature.shape[1]
+    n_output = labels.shape[1]
+
+    model = LogisticRegression(num_features,
+                               time_steps,
+                               n_output,
+                               batch_size=ExperimentSetup.batch_size,
+                               epochs=ExperimentSetup.epochs,
+                               output_n_epoch=ExperimentSetup.output_n_epochs)
+
+    if not os.path.exists("result_" + event_type):
+        os.makedirs("result_" + event_type)
+    filename = "result_" + event_type + "/LR " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+    return model_experiments(model, data_set, filename)
+
+
+def multi_layer_perceptron_experiments(event_type):
+    data_set = read_data()
+    dynamic_feature = data_set.dynamic_feature
+    labels = data_set.labels
+
+    num_features = dynamic_feature.shape[2]
+    time_steps = dynamic_feature.shape[1]
+    n_output = labels.shape[1]
+
+    model = MultiLayerPerceptron(num_features,
+                                 time_steps,
+                                 hidden_units=ExperimentSetup.lstm_size,
+                                 n_output=n_output,
+                                 batch_size=ExperimentSetup.batch_size,
+                                 epochs=ExperimentSetup.epochs,
+                                 output_n_epoch=ExperimentSetup.output_n_epochs)
+
+    if not os.path.exists("result_" + event_type):
+        os.makedirs("result_" + event_type)
+    filename = "result_" + event_type + "/MLP " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
     return model_experiments(model, data_set, filename)
 
 
 if __name__ == '__main__':
-    bidirectional_lstm_model_experiments('qx')
-    CA_RNN_experiments('qx')
+    # bidirectional_lstm_model_experiments('qx')
+    # CA_RNN_experiments('qx')
+    # logistic_regression_experiments("qx")
+    multi_layer_perceptron_experiments("qx")

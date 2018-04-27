@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from data import DataSet
+import time
 
 
 class BasicLSTMModel(object):
@@ -74,7 +75,8 @@ class BasicLSTMModel(object):
                 logged.add(data_set.epoch_completed)
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels})
-                print("loss of epoch {} is {}".format(data_set.epoch_completed, loss))
+                print("loss of epoch {} is {}".format(data_set.epoch_completed, loss),
+                      time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
 
     def predict(self, test_set):
         return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature})
@@ -151,4 +153,70 @@ class CA_RNN(BasicLSTMModel):
                 logged.add(data_set.epoch_completed)
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels})
-                print("loss of epoch {} is {}".format(data_set.epoch_completed, loss))
+                print("loss of epoch {} is {}".format(data_set.epoch_completed, loss),
+                      time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+
+
+class LogisticRegression(object):
+    # TODO 所有模型learning_rate需改，在experiment中
+    def __init__(self, num_features, time_steps, n_output, batch_size=64, epochs=1000,
+                 output_n_epoch=10, optimizer=tf.train.AdamOptimizer(), name='LRModel'):
+        self._num_features = num_features
+        self._epochs = epochs
+        self._name = name
+        self._batch_size = batch_size
+        self._output_n_epoch = output_n_epoch
+        self._time_steps = time_steps
+
+        with tf.variable_scope(self._name):
+            self._x = tf.placeholder(tf.float32, [None, time_steps * num_features], 'input')
+            self._y = tf.placeholder(tf.float32, [None, n_output], 'label')
+
+            self._sess = tf.Session()  # 会话
+
+            self._hidden_layer()
+
+            self._output = tf.contrib.layers.fully_connected(self._hidden_rep, n_output,
+                                                             activation_fn=tf.identity)  # 输出层
+            self._pred = tf.nn.sigmoid(self._output, name="pred")
+
+            self._loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self._y, logits=self._output),
+                                        name='loss')
+            self._train_op = optimizer.minimize(self._loss)
+
+    def _hidden_layer(self):
+        self._hidden_rep = self._x
+
+    def fit(self, data_set):
+        self._sess.run(tf.global_variables_initializer())
+        data_set.epoch_completed = 0
+
+        logged = set()
+        while data_set.epoch_completed < self._epochs:
+            dynamic_feature, labels = data_set.next_batch(self._batch_size)
+            self._sess.run(self._train_op,
+                           feed_dict={self._x: dynamic_feature.reshape([-1, self._time_steps * self._num_features]),
+                                      self._y: labels})
+
+            if data_set.epoch_completed % self._output_n_epoch == 0 and data_set.epoch_completed not in logged:
+                logged.add(data_set.epoch_completed)
+                loss = self._sess.run(self._loss, feed_dict={
+                    self._x: data_set.dynamic_feature.reshape([-1, self._time_steps * self._num_features]),
+                    self._y: data_set.labels})
+                print("loss of epoch {} is {}".format(data_set.epoch_completed, loss),
+                      time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+
+    def predict(self, test_set):
+        return self._sess.run(self._pred, feed_dict={
+            self._x: test_set.dynamic_feature.reshape([-1, self._time_steps * self._num_features])})
+
+
+class MultiLayerPerceptron(LogisticRegression):
+    def __init__(self, num_features, time_steps, hidden_units, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
+                 optimizer=tf.train.AdamOptimizer(), name='MLPModel'):
+        self._hidden_units = hidden_units
+        self._n_output = n_output
+        super().__init__(num_features, time_steps, n_output, batch_size, epochs, output_n_epoch, optimizer, name)
+
+    def _hidden_layer(self):
+        self._hidden_rep = tf.contrib.layers.fully_connected(self._x, self._n_output)
