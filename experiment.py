@@ -19,7 +19,7 @@ class ExperimentSetup(object):
 
     lstm_size = 128
     learning_rate = 0.0001
-    epochs = 20
+    epochs = 1
     output_n_epochs = 1
 
 
@@ -44,7 +44,7 @@ def evaluate(test_index, y_label, y_score, file_name):
     auc = roc_auc_score(y_label, y_score)
 
     threshold = plot_roc(y_label, y_score, table, table_title, file_name)
-    y_pred_label = (y_score >= threshold)
+    y_pred_label = (y_score >= threshold) * 1
     acc = accuracy_score(y_label, y_pred_label)
     recall = recall_score(y_label, y_pred_label)
     precision = precision_score(y_label, y_pred_label)
@@ -56,72 +56,53 @@ def evaluate(test_index, y_label, y_score, file_name):
     table.write(1, table_title.index("precision"), float(precision))
     table.write(1, table_title.index("f1-score"), float(f1))
 
-    fp = []
-    tp = []
-    fn = []
-    tn = []
+    fp_sentence = fn_sentence = tp_sentence = tn_sentence = []
+    fp_count = tp_count = fn_count = tn_count = 1
+    sentence_set = load(open("all_sentences.pkl", "rb"))
     for j in range(len(y_label)):
         if y_label[j] == 0 and y_pred_label[j] == 1:  # FP
-            fp.append(test_index[j])
+            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, fp_sentence,
+                         "fp", fp_count)
+            fp_count += 1
         if y_label[j] == 1 and y_pred_label[j] == 1:  # TP
-            tp.append(test_index[j])
+            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, tp_sentence,
+                         "tp", tp_count)
+            tp_count += 1
         if y_label[j] == 1 and y_pred_label[j] == 0:  # FN
-            fn.append(test_index[j])
+            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, fn_sentence,
+                         "fn", fn_count)
+            fn_count += 1
         if y_label[j] == 0 and y_pred_label[j] == 0:  # TN
-            tn.append(test_index[j])
+            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, tn_sentence,
+                         "tn", tn_count)
+            tn_count += 1
 
-        table.write(j + 1, table_title.index("test_index"), int(test_index[j]))
-        table.write(j + 1, table_title.index("label"), int(y_label[j]))
-        table.write(j + 1, table_title.index("prob"), float(y_score[j]))
-        table.write(j + 1, table_title.index("pre"), int(y_pred_label[j]))
+    write_word_statistics(fp_sentence, table, table_title, "fp")
+    write_word_statistics(tp_sentence, table, table_title, "tp")
+    write_word_statistics(fn_sentence, table, table_title, "fn")
+    write_word_statistics(tn_sentence, table, table_title, "tn")
 
-    fp_sentence = []
-    fn_sentence = []
-    tp_sentence = []
-    tn_sentence = []
-    sentence_set = load(open("all_sentences.pkl", "rb"))
-    for i in range(len(fp)):
-        fp_sentence.extend(sentence_set[fp[i]])
-        table.write(i + 1, table_title.index("fp"), int(fp[i]))
-    for i in range(len(fn)):
-        fn_sentence.extend(sentence_set[fn[i]])
-        table.write(i + 1, table_title.index("fn"), int(fn[i]))
-    for i in range(len(tp)):
-        tp_sentence.extend(sentence_set[tp[i]])
-        table.write(i + 1, table_title.index("tp"), int(tp[i]))
-    for i in range(len(tn)):
-        tn_sentence.extend(sentence_set[tn[i]])
-        table.write(i + 1, table_title.index("tn"), int(tn[i]))
-    fp_words = Counter(fp_sentence).most_common()
-    fn_words = Counter(fn_sentence).most_common()
-    tp_words = Counter(tp_sentence).most_common()
-    tn_words = Counter(tn_sentence).most_common()
-    j = 1
-    for i in fp_words:
-        (a, b) = i
-        table.write(j, table_title.index("fp_words"), a)
-        table.write(j, table_title.index("fp_freq"), b)
-        j = j + 1
-    j = 1
-    for i in fn_words:
-        (a, b) = i
-        table.write(j, table_title.index("fn_words"), a)
-        table.write(j, table_title.index("fn_freq"), b)
-        j = j + 1
-    j = 1
-    for i in tp_words:
-        (a, b) = i
-        table.write(j, table_title.index("tp_words"), a)
-        table.write(j, table_title.index("tp_freq"), b)
-        j = j + 1
-    j = 1
-    for i in tn_words:
-        (a, b) = i
-        table.write(j, table_title.index("tn_words"), a)
-        table.write(j, table_title.index("tn_freq"), b)
-        j = j + 1
     wb.save(file_name + ".xls")
     return acc, auc, precision, recall, f1
+
+
+def write_result(j, index, y_label, y_score, y_pred_label, table, table_title, sentence_set, samples, group_name,count):
+    table.write(j + 1, table_title.index("test_index"), int(index[j]))
+    table.write(j + 1, table_title.index("label"), int(y_label[j]))
+    table.write(j + 1, table_title.index("prob"), float(y_score[j]))
+    table.write(j + 1, table_title.index("pre"), int(y_pred_label[j]))
+    samples.extend(sentence_set[index[j]])
+    table.write(count, table_title.index(group_name), int(index[j]))
+
+
+def write_word_statistics(samples, table, table_title, group_name):
+    words = Counter(samples).most_common()
+    j = 1
+    for i in words:
+        (a, b) = i
+        table.write(j, table_title.index(group_name + "_words"), a)
+        table.write(j, table_title.index(group_name + "_freq"), b)
+        j = j + 1
 
 
 def plot_roc(test_labels, test_predictions, table, table_title, filename):
@@ -145,7 +126,7 @@ def plot_roc(test_labels, test_predictions, table, table_title, filename):
         table.write(i + 1, table_title.index("thresholds"), float(thresholds[i]))
     auc = "%.3f" % sklearn.metrics.auc(fpr, tpr)
     title = 'ROC Curve, AUC = ' + str(auc)
-    with plt.style.context(('ggplot')):
+    with plt.style.context('ggplot'):
         fig, ax = plt.subplots()
         ax.plot(fpr, tpr, "#000099", label='ROC curve')
         ax.plot([0, 1], [0, 1], 'k--', label='Baseline')
@@ -229,7 +210,7 @@ def bidirectional_lstm_model_experiments(event_type):
     return model_experiments(model, data_set, filename)
 
 
-def CA_RNN_experiments(event_type):
+def context_attention_rnn_experiments(event_type):
     data_set = read_data()
     dynamic_feature = data_set.dynamic_feature
     labels = data_set.labels
@@ -299,6 +280,6 @@ def multi_layer_perceptron_experiments(event_type):
 
 if __name__ == '__main__':
     # bidirectional_lstm_model_experiments('qx')
-    # CA_RNN_experiments('qx')
+    # context_attention_rnn_experiments('qx')
     # logistic_regression_experiments("qx")
     multi_layer_perceptron_experiments("qx")
