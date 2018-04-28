@@ -26,18 +26,17 @@ class ExperimentSetup(object):
 def evaluate(test_index, y_label, y_score, file_name):
     """
     对模型的预测性能进行评估
-    :param tol_label: 测试样本的真实标签
-    :param tol_pred: 测试样本的预测概率分布
+    :param tol_label: 测试样本的真实标签 true label of test-set
+    :param tol_pred: 测试样本的预测概率 predicted probability of test-set
     :param event_type: 预测事件类型  target type of AME
     :param model_name: 使用的模型    used model
-    :return: 正确率，AUC，精度，召回率， F1值
+    :return: 正确率-accuracy，AUC，召回率-recall，精度-precision， F1值-f1score
     """
-    # TODO: 输出文件已添加测试集下标，实际和预测值，需加入TP，FP统计及其词频统计
     wb = xlwt.Workbook(file_name + '.xls')
     table = wb.add_sheet('Sheet1')
-    table_title = ["test_index", "label", "prob", "pre", "fpr", "tpr", "thresholds", "fp", "tp", "fn", "tn", "fp_words",
-                   "fp_freq", "tp_words", "tp_freq", "fn_words", "fn_freq", "tn_words", "tn_freq", "acc", "auc",
-                   "recall", "precision", "f1-score", "threshold"]
+    table_title = ["test_index", "label", "prob", "pre", " ", "fpr", "tpr", "thresholds", " ", "fp", "tp", "fn", "tn",
+                   "fp_words", "fp_freq", "tp_words", "tp_freq", "fn_words", "fn_freq", "tn_words", "tn_freq", " ",
+                   "acc", "auc", "recall", "precision", "f1-score", "threshold"]
     for i in range(len(table_title)):
         table.write(0, i, table_title[i])
 
@@ -50,43 +49,63 @@ def evaluate(test_index, y_label, y_score, file_name):
     precision = precision_score(y_label, y_pred_label)
     f1 = f1_score(y_label, y_pred_label)
 
+    # write metrics
     table.write(1, table_title.index("auc"), float(auc))
     table.write(1, table_title.index("acc"), float(acc))
     table.write(1, table_title.index("recall"), float(recall))
     table.write(1, table_title.index("precision"), float(precision))
     table.write(1, table_title.index("f1-score"), float(f1))
 
-    fp_sentence = fn_sentence = tp_sentence = tn_sentence = []
+    # collect samples of FP, TP ,FN ,TN and write the result of prediction
+    fp_sentences = fn_sentences = tp_sentences = tn_sentences = []
     fp_count = tp_count = fn_count = tn_count = 1
     sentence_set = load(open("all_sentences.pkl", "rb"))
     for j in range(len(y_label)):
         if y_label[j] == 0 and y_pred_label[j] == 1:  # FP
-            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, fp_sentence,
+            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, fp_sentences,
                          "fp", fp_count)
             fp_count += 1
         if y_label[j] == 1 and y_pred_label[j] == 1:  # TP
-            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, tp_sentence,
+            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, tp_sentences,
                          "tp", tp_count)
             tp_count += 1
         if y_label[j] == 1 and y_pred_label[j] == 0:  # FN
-            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, fn_sentence,
+            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, fn_sentences,
                          "fn", fn_count)
             fn_count += 1
         if y_label[j] == 0 and y_pred_label[j] == 0:  # TN
-            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, tn_sentence,
+            write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, tn_sentences,
                          "tn", tn_count)
             tn_count += 1
 
-    write_word_statistics(fp_sentence, table, table_title, "fp")
-    write_word_statistics(tp_sentence, table, table_title, "tp")
-    write_word_statistics(fn_sentence, table, table_title, "fn")
-    write_word_statistics(tn_sentence, table, table_title, "tn")
+    # word frequency statistic
+    write_word_statistics(fp_sentences, table, table_title, "fp")
+    write_word_statistics(tp_sentences, table, table_title, "tp")
+    write_word_statistics(fn_sentences, table, table_title, "fn")
+    write_word_statistics(tn_sentences, table, table_title, "tn")
 
     wb.save(file_name + ".xls")
     return acc, auc, precision, recall, f1
 
 
-def write_result(j, index, y_label, y_score, y_pred_label, table, table_title, sentence_set, samples, group_name,count):
+def write_result(j, index, y_label, y_score, y_pred_label, table, table_title, sentence_set, samples, group_name,
+                 count):
+    """
+    1.write the indexs of test samples and its true label, predicted probabilities and predicted labels
+    2.collect samples of FP, TP ,FN ,TN
+    :param j:
+    :param index:
+    :param y_label:
+    :param y_score:
+    :param y_pred_label:
+    :param table:
+    :param table_title:
+    :param sentence_set:
+    :param samples:
+    :param group_name:
+    :param count:
+    :return:
+    """
     table.write(j + 1, table_title.index("test_index"), int(index[j]))
     table.write(j + 1, table_title.index("label"), int(y_label[j]))
     table.write(j + 1, table_title.index("prob"), float(y_score[j]))
@@ -96,6 +115,14 @@ def write_result(j, index, y_label, y_score, y_pred_label, table, table_title, s
 
 
 def write_word_statistics(samples, table, table_title, group_name):
+    """
+    词频统计并写入xls文件
+    :param samples: group of collected samples(samples of FP, TP, FN ,TN)
+    :param table: the sheet of workbook
+    :param table_title: the first row of table
+    :param group_name: name of group
+    :return:
+    """
     words = Counter(samples).most_common()
     j = 1
     for i in words:
@@ -117,8 +144,7 @@ def plot_roc(test_labels, test_predictions, table, table_title, filename):
     :param filename: 图片文件名
     :return: optimal threshold
     """
-    fpr, tpr, thresholds = roc_curve(
-        test_labels, test_predictions, pos_label=1)
+    fpr, tpr, thresholds = roc_curve(test_labels, test_predictions, pos_label=1)
     threshold = thresholds[np.argmax(tpr - fpr)]
     for i in range(len(fpr)):
         table.write(i + 1, table_title.index("fpr"), fpr[i])
