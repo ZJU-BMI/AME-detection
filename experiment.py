@@ -1,14 +1,14 @@
 import os
-
+from pickle import load
+from collections import Counter
 import matplotlib.pyplot as plt
 import time
-
 import sklearn
 import xlwt
 from imblearn.over_sampling import SMOTE
 import numpy as np
-from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, roc_curve  # roc计算曲线
 
+from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, roc_curve  # roc计算曲线
 from data import read_data, DataSet
 from models import BidirectionalLSTMModel, CA_RNN, LogisticRegression, MultiLayerPerceptron
 
@@ -36,7 +36,7 @@ def evaluate(test_index, y_label, y_score, file_name):
     wb = xlwt.Workbook(file_name + '.xls')
     table = wb.add_sheet('Sheet1')
     table_title = ["test_index", "label", "prob", "pre", "fpr", "tpr", "thresholds", "fp", "tp", "fn", "tn", "fp_words",
-                   "fp_freq", "fn_words", "fn_freq", "tp_words", "tp_freq", "tn_words", "tn_freq", "acc", "auc",
+                   "fp_freq", "tp_words", "tp_freq", "fn_words", "fn_freq", "tn_words", "tn_freq", "acc", "auc",
                    "recall", "precision", "f1-score", "threshold"]
     for i in range(len(table_title)):
         table.write(0, i, table_title[i])
@@ -64,9 +64,9 @@ def evaluate(test_index, y_label, y_score, file_name):
         if y_label[j] == 0 and y_pred_label[j] == 1:  # FP
             fp.append(test_index[j])
         if y_label[j] == 1 and y_pred_label[j] == 1:  # TP
-            fn.append(test_index[j])
-        if y_label[j] == 1 and y_pred_label[j] == 0:  # FN
             tp.append(test_index[j])
+        if y_label[j] == 1 and y_pred_label[j] == 0:  # FN
+            fn.append(test_index[j])
         if y_label[j] == 0 and y_pred_label[j] == 0:  # TN
             tn.append(test_index[j])
 
@@ -75,6 +75,51 @@ def evaluate(test_index, y_label, y_score, file_name):
         table.write(j + 1, table_title.index("prob"), float(y_score[j]))
         table.write(j + 1, table_title.index("pre"), int(y_pred_label[j]))
 
+    fp_sentence = []
+    fn_sentence = []
+    tp_sentence = []
+    tn_sentence = []
+    sentence_set = load(open("all_sentences.pkl", "rb"))
+    for i in range(len(fp)):
+        fp_sentence.extend(sentence_set[fp[i]])
+        table.write(i + 1, table_title.index("fp"), int(fp[i]))
+    for i in range(len(fn)):
+        fn_sentence.extend(sentence_set[fn[i]])
+        table.write(i + 1, table_title.index("fn"), int(fn[i]))
+    for i in range(len(tp)):
+        tp_sentence.extend(sentence_set[tp[i]])
+        table.write(i + 1, table_title.index("tp"), int(tp[i]))
+    for i in range(len(tn)):
+        tn_sentence.extend(sentence_set[tn[i]])
+        table.write(i + 1, table_title.index("tn"), int(tn[i]))
+    fp_words = Counter(fp_sentence).most_common()
+    fn_words = Counter(fn_sentence).most_common()
+    tp_words = Counter(tp_sentence).most_common()
+    tn_words = Counter(tn_sentence).most_common()
+    j = 1
+    for i in fp_words:
+        (a, b) = i
+        table.write(j, table_title.index("fp_words"), a)
+        table.write(j, table_title.index("fp_freq"), b)
+        j = j + 1
+    j = 1
+    for i in fn_words:
+        (a, b) = i
+        table.write(j, table_title.index("fn_words"), a)
+        table.write(j, table_title.index("fn_freq"), b)
+        j = j + 1
+    j = 1
+    for i in tp_words:
+        (a, b) = i
+        table.write(j, table_title.index("tp_words"), a)
+        table.write(j, table_title.index("tp_freq"), b)
+        j = j + 1
+    j = 1
+    for i in tn_words:
+        (a, b) = i
+        table.write(j, table_title.index("tn_words"), a)
+        table.write(j, table_title.index("tn_freq"), b)
+        j = j + 1
     wb.save(file_name + ".xls")
     return acc, auc, precision, recall, f1
 
@@ -121,7 +166,7 @@ def model_experiments(model, data_set, filename):
 
     n_output = labels.shape[1]  # classes
 
-    tol_test_index = np.zeros(shape=(0, n_output))
+    tol_test_index = np.zeros(shape=0, dtype=np.int32)
     tol_pred = np.zeros(shape=(0, n_output))
     tol_label = np.zeros(shape=(0, n_output), dtype=np.int32)
     i = 1
@@ -140,7 +185,7 @@ def model_experiments(model, data_set, filename):
 
         y_score = model.predict(test_set)
 
-        tol_test_index = np.vstack((tol_test_index, test_idx.reshape([-1,1])))
+        tol_test_index = np.concatenate((tol_test_index, test_idx))
         tol_pred = np.vstack((tol_pred, y_score))
         tol_label = np.vstack((tol_label, test_y))
         print("Cross validation: {} of {}".format(i, ExperimentSetup.kfold))
