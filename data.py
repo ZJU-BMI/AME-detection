@@ -67,8 +67,7 @@ class DataSet(object):
 def read_data():
     # TODO 改为switch形式，选择读取不同事件
     dynamic_features = pickle.load(open("input_file_np_1000f_xjqx+_80w.pkl", "rb"))
-    labels = pickle.load(open("output_file_np_1000f_xjqx+_80w.pkl", "rb"))[:,
-             -1].reshape([-1, 1])
+    labels = pickle.load(open("output_file_np_1000f_xjqx+_80w.pkl", "rb"))[:, -1].reshape([-1, 1])
     return DataSet(dynamic_features, labels)
 
 

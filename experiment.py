@@ -23,7 +23,7 @@ class ExperimentSetup(object):
     output_n_epochs = 1
 
 
-def evaluate(y_label, y_score, file_name):
+def evaluate(test_index, y_label, y_score, file_name):
     """
     对模型的预测性能进行评估
     :param tol_label: 测试样本的真实标签
@@ -32,10 +32,10 @@ def evaluate(y_label, y_score, file_name):
     :param model_name: 使用的模型    used model
     :return: 正确率，AUC，精度，召回率， F1值
     """
-    # TODO: 写入TPR,FPR,threshold 已完成，写入acc, auc等已完成，需加入词频统计
+    # TODO: 输出文件已添加测试集下标，实际和预测值，需加入TP，FP统计及其词频统计
     wb = xlwt.Workbook(file_name + '.xls')
     table = wb.add_sheet('Sheet1')
-    table_title = ["test_index", "label", "prob", "pre", "fpr", "tpr", "thresholds", "fp", "fn", "tp", "tn", "fp_words",
+    table_title = ["test_index", "label", "prob", "pre", "fpr", "tpr", "thresholds", "fp", "tp", "fn", "tn", "fp_words",
                    "fp_freq", "fn_words", "fn_freq", "tp_words", "tp_freq", "tn_words", "tn_freq", "acc", "auc",
                    "recall", "precision", "f1-score", "threshold"]
     for i in range(len(table_title)):
@@ -56,6 +56,25 @@ def evaluate(y_label, y_score, file_name):
     table.write(1, table_title.index("precision"), float(precision))
     table.write(1, table_title.index("f1-score"), float(f1))
 
+    fp = []
+    tp = []
+    fn = []
+    tn = []
+    for j in range(len(y_label)):
+        if y_label[j] == 0 and y_pred_label[j] == 1:  # FP
+            fp.append(test_index[j])
+        if y_label[j] == 1 and y_pred_label[j] == 1:  # TP
+            fn.append(test_index[j])
+        if y_label[j] == 1 and y_pred_label[j] == 0:  # FN
+            tp.append(test_index[j])
+        if y_label[j] == 0 and y_pred_label[j] == 0:  # TN
+            tn.append(test_index[j])
+
+        table.write(j + 1, table_title.index("test_index"), int(test_index[j]))
+        table.write(j + 1, table_title.index("label"), int(y_label[j]))
+        table.write(j + 1, table_title.index("prob"), float(y_score[j]))
+        table.write(j + 1, table_title.index("pre"), int(y_pred_label[j]))
+
     wb.save(file_name + ".xls")
     return acc, auc, precision, recall, f1
 
@@ -69,7 +88,7 @@ def plot_roc(test_labels, test_predictions, table, table_title, filename):
     :param test_predictions: 测试集预测值
     :param table: xls文件的sheet
     :param table_title: 表头字符串数组
-    :param filename: 图片
+    :param filename: 图片文件名
     :return: optimal threshold
     """
     fpr, tpr, thresholds = roc_curve(
@@ -102,6 +121,7 @@ def model_experiments(model, data_set, filename):
 
     n_output = labels.shape[1]  # classes
 
+    tol_test_index = np.zeros(shape=(0, n_output))
     tol_pred = np.zeros(shape=(0, n_output))
     tol_label = np.zeros(shape=(0, n_output), dtype=np.int32)
     i = 1
@@ -119,11 +139,13 @@ def model_experiments(model, data_set, filename):
         test_set = DataSet(test_dynamic, test_y)
 
         y_score = model.predict(test_set)
+
+        tol_test_index = np.vstack((tol_test_index, test_idx.reshape([-1,1])))
         tol_pred = np.vstack((tol_pred, y_score))
         tol_label = np.vstack((tol_label, test_y))
         print("Cross validation: {} of {}".format(i, ExperimentSetup.kfold))
         i += 1
-    return evaluate(tol_label, tol_pred, filename)
+    return evaluate(tol_test_index, tol_label, tol_pred, filename)
 
 
 def imbalance_preprocess(train_dynamic, train_y):  # SMOTE过采样
