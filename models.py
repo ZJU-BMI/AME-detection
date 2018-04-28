@@ -5,12 +5,13 @@ import time
 
 
 class BasicLSTMModel(object):
-    def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000,
-                 output_n_epoch=10, optimizer=tf.train.AdamOptimizer(), name='BasicLSTMModel'):
+    def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
+                 learning_rate=0.01, max_loss=0.5, max_pace=0.01, lasso=0.0, ridge=0.0,
+                 optimizer=tf.train.AdamOptimizer, name='BasicLSTMModel'):
         """
 
-        :param num_features: dimension of input data per time step    time step的作用是什么？
-        :param time_steps: max time step ？
+        :param num_features: dimension of input data per time step
+        :param time_steps: max time step
         :param batch_size: batch size
         :param lstm_size: size of lstm cell
         :param n_output: classes
@@ -26,6 +27,12 @@ class BasicLSTMModel(object):
         self._output_n_epoch = output_n_epoch
         self._lstm_size = lstm_size
         self._time_steps = time_steps
+        self._max_loss = max_loss
+        self._max_pace = max_pace
+        self._lasso = lasso
+        self._ridge = ridge
+
+        print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace)
 
         with tf.variable_scope(self._name):
             self._x = tf.placeholder(tf.float32, [None, time_steps, num_features], 'input')
@@ -41,7 +48,16 @@ class BasicLSTMModel(object):
 
             self._loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self._y, logits=self._output),
                                         name='loss')
-            self._train_op = optimizer.minimize(self._loss)
+            # TODO 后续加入正则
+            # for trainable_variables in tf.trainable_variables():
+            #     self._loss += tf.contrib.layers.l1_regularizer(lasso)(trainable_variables)
+            #     self._loss += tf.contrib.layers.l2_regularizer(lasso)(trainable_variables)
+
+            self._train_op = optimizer(learning_rate).minimize(self._loss)
+
+    @property
+    def name(self):
+        return self._name
 
     def _hidden_layer(self):
         lstm = tf.contrib.rnn.BasicLSTMCell(self._lstm_size)  # ??????
@@ -66,6 +82,8 @@ class BasicLSTMModel(object):
         data_set.epoch_completed = 0
 
         logged = set()
+        loss = 0
+        count = 0
         while data_set.epoch_completed < self._epochs:
             dynamic_feature, labels = data_set.next_batch(self._batch_size)
             self._sess.run(self._train_op, feed_dict={self._x: dynamic_feature,
@@ -73,10 +91,21 @@ class BasicLSTMModel(object):
 
             if data_set.epoch_completed % self._output_n_epoch == 0 and data_set.epoch_completed not in logged:
                 logged.add(data_set.epoch_completed)
+                loss_prev = loss
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels})
-                print("loss of epoch {} is {}".format(data_set.epoch_completed, loss),
+                loss_diff = loss_prev - loss
+                print("{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+                if loss > self._max_loss:
+                    count = 0
+                else:
+                    if loss_diff > self._max_pace:
+                        count = 0
+                    else:
+                        count += 1
+                if count > 9:
+                    break
 
     def predict(self, test_set):
         return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature})
@@ -84,9 +113,10 @@ class BasicLSTMModel(object):
 
 class BidirectionalLSTMModel(BasicLSTMModel):
     def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
-                 optimizer=tf.train.AdamOptimizer(), name='bidirectionalLSTMModel'):
-        super().__init__(num_features, time_steps, lstm_size, n_output, batch_size, epochs, output_n_epoch, optimizer,
-                         name)  # 调用父类BasicLSTMModel的初始化函数
+                 learning_rate=0.01, max_loss=0.5, max_pace=0.01, lasso=0.0, ridge=0.0,
+                 optimizer=tf.train.AdamOptimizer, name='Bi-LSTM'):
+        super().__init__(num_features, time_steps, lstm_size, n_output, batch_size, epochs, output_n_epoch,
+                         learning_rate, max_loss, max_pace, lasso, ridge, optimizer, name)  # 调用父类BasicLSTMModel的初始化函数
 
     def _hidden_layer(self):
         self._lstm = {}
@@ -107,13 +137,15 @@ class BidirectionalLSTMModel(BasicLSTMModel):
                                                                            (1, self._lstm_size * 2))
 
 
-class CA_RNN(BasicLSTMModel):
+class ContextAttentionRNN(BidirectionalLSTMModel):
     def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
-                 optimizer=tf.train.AdamOptimizer(), name="BiLSTMWithAttention"):
-        super().__init__(num_features, time_steps, lstm_size, n_output, batch_size, epochs, output_n_epoch, optimizer,
-                         name)
+                 learning_rate=0.01, max_loss=0.5, max_pace=0.01, lasso=0.0, ridge=0.0,
+                 optimizer=tf.train.AdamOptimizer, name="CA-RNN"):
+        self._name = name
         with tf.variable_scope(self._name):
             self._W_trans = tf.Variable(tf.truncated_normal([10, 100], stddev=0.1))
+        super().__init__(num_features, time_steps, lstm_size, n_output, batch_size, epochs, output_n_epoch,
+                         learning_rate, max_loss, max_pace, lasso, ridge, optimizer, name)
 
     def _attention(self, dataset):
         x = dataset.dynamic_feature
@@ -140,34 +172,57 @@ class CA_RNN(BasicLSTMModel):
     def fit(self, data_set):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
+        # for c in tf.trainable_variables():
+        #     print(c.name)
+        # TODO 此步耗时过长，待检验
         data_set = DataSet(self._attention(data_set), data_set.labels)
 
+
         logged = set()
-        # TODO 迭代停止条件改写， 若试参可逐步显示各指标
+        loss = 0
+        count = 0
+        # TODO 迭代停止条件改写已完成， 若试参可逐步显示各指标
         while data_set.epoch_completed < self._epochs:
             dynamic_feature, labels = data_set.next_batch(self._batch_size)
+
             self._sess.run(self._train_op, feed_dict={self._x: dynamic_feature,
                                                       self._y: labels})
 
             if data_set.epoch_completed % self._output_n_epoch == 0 and data_set.epoch_completed not in logged:
                 logged.add(data_set.epoch_completed)
+                loss_prev = loss
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels})
-                print("loss of epoch {} is {}".format(data_set.epoch_completed, loss),
+                loss_diff = loss_prev - loss
+                print("{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+                if loss > self._max_loss:
+                    count = 0
+                else:
+                    if loss_diff > self._max_pace:
+                        count = 0
+                    else:
+                        count += 1
+                if count > 9:
+                    break
 
 
 class LogisticRegression(object):
-    # TODO 所有模型learning_rate需改，在experiment中
-    def __init__(self, num_features, time_steps, n_output, batch_size=64, epochs=1000,
-                 output_n_epoch=10, optimizer=tf.train.AdamOptimizer(), name='LRModel'):
+    # TODO 所有模型learning_rate需改，在experiment中--已完成
+    def __init__(self, num_features, time_steps, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
+                 learning_rate=0.01, max_loss=2.0, max_pace=0.1, lasso=0.0, ridge=0.0, optimizer=tf.train.AdamOptimizer,
+                 name='LRModel'):
         self._num_features = num_features
         self._epochs = epochs
         self._name = name
         self._batch_size = batch_size
         self._output_n_epoch = output_n_epoch
         self._time_steps = time_steps
-
+        self._max_loss = max_loss
+        self._max_pace = max_pace
+        self._lasso = lasso
+        self._ridge = ridge
+        print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace)
         with tf.variable_scope(self._name):
             self._x = tf.placeholder(tf.float32, [None, time_steps * num_features], 'input')
             self._y = tf.placeholder(tf.float32, [None, n_output], 'label')
@@ -182,7 +237,15 @@ class LogisticRegression(object):
 
             self._loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self._y, logits=self._output),
                                         name='loss')
-            self._train_op = optimizer.minimize(self._loss)
+            for trainable_variables in tf.trainable_variables():
+                self._loss += tf.contrib.layers.l1_regularizer(lasso)(trainable_variables)
+                self._loss += tf.contrib.layers.l2_regularizer(lasso)(trainable_variables)
+
+            self._train_op = optimizer(learning_rate).minimize(self._loss)
+
+    @property
+    def name(self):
+        return self._name
 
     def _hidden_layer(self):
         self._hidden_rep = self._x
@@ -191,7 +254,14 @@ class LogisticRegression(object):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
+        print("epoch\tloss\tloss_diff")
+
+        # for c in tf.trainable_variables():
+        #     print(c.name)
+
         logged = set()
+        loss = 0
+        count = 0
         while data_set.epoch_completed < self._epochs:
             dynamic_feature, labels = data_set.next_batch(self._batch_size)
             self._sess.run(self._train_op,
@@ -200,11 +270,22 @@ class LogisticRegression(object):
 
             if data_set.epoch_completed % self._output_n_epoch == 0 and data_set.epoch_completed not in logged:
                 logged.add(data_set.epoch_completed)
+                loss_prev = loss
                 loss = self._sess.run(self._loss, feed_dict={
                     self._x: data_set.dynamic_feature.reshape([-1, self._time_steps * self._num_features]),
                     self._y: data_set.labels})
-                print("loss of epoch {} is {}".format(data_set.epoch_completed, loss),
+                loss_diff = loss_prev - loss
+                print("{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+                if loss > self._max_loss:
+                    count = 0
+                else:
+                    if loss_diff > self._max_pace:
+                        count = 0
+                    else:
+                        count += 1
+                if count > 9:
+                    break
 
     def predict(self, test_set):
         return self._sess.run(self._pred, feed_dict={
@@ -213,10 +294,12 @@ class LogisticRegression(object):
 
 class MultiLayerPerceptron(LogisticRegression):
     def __init__(self, num_features, time_steps, hidden_units, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
-                 optimizer=tf.train.AdamOptimizer(), name='MLPModel'):
+                 learning_rate=0.01, max_loss=2.0, max_pace=0.1, lasso=0.0, ridge=0.0, optimizer=tf.train.AdamOptimizer,
+                 name='MLPModel'):
         self._hidden_units = hidden_units
         self._n_output = n_output
-        super().__init__(num_features, time_steps, n_output, batch_size, epochs, output_n_epoch, optimizer, name)
+        super().__init__(num_features, time_steps, n_output, batch_size, epochs, output_n_epoch, learning_rate,
+                         max_loss, max_pace, lasso, ridge, optimizer, name)
 
     def _hidden_layer(self):
         self._hidden_rep = tf.contrib.layers.fully_connected(self._x, self._n_output)

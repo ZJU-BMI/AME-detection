@@ -10,17 +10,62 @@ import numpy as np
 
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, roc_curve  # roc计算曲线
 from data import read_data, DataSet
-from models import BidirectionalLSTMModel, CA_RNN, LogisticRegression, MultiLayerPerceptron
+from models import BidirectionalLSTMModel, ContextAttentionRNN, LogisticRegression, MultiLayerPerceptron
 
 
 class ExperimentSetup(object):
     kfold = 5
     batch_size = 64
-
-    lstm_size = 128
-    learning_rate = 0.0001
-    epochs = 1
+    hidden_size = 128
+    epochs = 200
     output_n_epochs = 1
+
+    def __init__(self, learning_rate=0.01, max_loss=2.0, max_pace=0.01, lasso=0.0, ridge=0.0):
+        self._learning_rate = learning_rate
+        self._max_loss = max_loss
+        self._max_pace = max_pace
+        self._lasso = lasso
+        self._ridge = ridge
+
+    @property
+    def learning_rate(self):
+        return self._learning_rate
+
+    @property
+    def max_loss(self):
+        return self._max_loss
+
+    @property
+    def max_pace(self):
+        return self._max_pace
+
+    @property
+    def lasso(self):
+        return self._lasso
+
+    @property
+    def ridge(self):
+        return self._ridge
+
+    @property
+    def all(self):
+        return self._learning_rate, self._max_loss, self._max_pace, self._lasso, self._ridge
+
+
+lr_qx_setup = ExperimentSetup(0.01, 2, 0.01, 0.01, 0.01)
+mlp_qx_setup = ExperimentSetup(0.01, 2, 0.1, 0.0001, 0.001)
+bi_lstm_qx_setup = ExperimentSetup(0.01, 0.5, 0.01)
+ca_rnn_qx_setup = ExperimentSetup(0.01, 0.08, 0.008)
+
+lr_xycj_setup = ExperimentSetup(0.01, 2, 0.004, 0.01, 0.001)
+mlp_xycj_setup = ExperimentSetup(0.01, 2, 0.005, 0.0001, 0.001)
+bi_lstm_xycj_setup = ExperimentSetup(0.001, 0.5, 0.001)
+ca_rnn_xycj_setup = ExperimentSetup(0.001, 0.1, 0.0025)
+
+lr_cx_setup = ExperimentSetup(0.01, 2, 0.001, 0.001, 0.01)
+mlp_cx_setup = ExperimentSetup(0.01, 2, 0.1, 0.0001, 0.001)
+bi_lstm_cx_setup = ExperimentSetup(0.01, 0.4, 0.04)
+ca_rnn_cx_setup = ExperimentSetup(0.01, 0.1, 0.002)
 
 
 def evaluate(test_index, y_label, y_score, file_name):
@@ -150,6 +195,7 @@ def plot_roc(test_labels, test_predictions, table, table_title, filename):
         table.write(i + 1, table_title.index("fpr"), fpr[i])
         table.write(i + 1, table_title.index("tpr"), tpr[i])
         table.write(i + 1, table_title.index("thresholds"), float(thresholds[i]))
+    table.write(2, table_title.index("threshold"), float(threshold))
     auc = "%.3f" % sklearn.metrics.auc(fpr, tpr)
     title = 'ROC Curve, AUC = ' + str(auc)
     with plt.style.context('ggplot'):
@@ -177,7 +223,7 @@ def model_experiments(model, data_set, filename):
     tol_pred = np.zeros(shape=(0, n_output))
     tol_label = np.zeros(shape=(0, n_output), dtype=np.int32)
     i = 1
-    for train_idx, test_idx in kf.split(X=data_set.dynamic_feature, y=data_set.labels):  # 五折交叉
+    for train_idx, test_idx in kf.split(X=data_set.dynamic_feature, y=data_set.labels.reshape(-1)):  # 五折交叉
         train_dynamic = dynamic_feature[train_idx]
         train_y = labels[train_idx]
 
@@ -223,13 +269,25 @@ def bidirectional_lstm_model_experiments(event_type):
     time_steps = dynamic_feature.shape[1]
     n_output = labels.shape[1]
 
-    model = BidirectionalLSTMModel(num_features,
-                                   time_steps,
-                                   ExperimentSetup.lstm_size,
-                                   n_output,
+    if event_type == "qx":
+        learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_qx_setup.all
+    elif event_type == "cx":
+        learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_cx_setup.all
+    else:
+        learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_xycj_setup.all
+
+    model = BidirectionalLSTMModel(num_features=num_features,
+                                   time_steps=time_steps,
+                                   lstm_size=ExperimentSetup.hidden_size,
+                                   n_output=n_output,
                                    batch_size=ExperimentSetup.batch_size,
                                    epochs=ExperimentSetup.epochs,
-                                   output_n_epoch=ExperimentSetup.output_n_epochs)
+                                   output_n_epoch=ExperimentSetup.output_n_epochs,
+                                   learning_rate=learning_rate,
+                                   max_loss=max_loss,
+                                   max_pace=max_pace,
+                                   lasso=lasso,
+                                   ridge=ridge)
     if not os.path.exists("result_" + event_type):
         os.makedirs("result_" + event_type)
     filename = "result_" + event_type + "/Bi-LSTM " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
@@ -245,13 +303,25 @@ def context_attention_rnn_experiments(event_type):
     time_steps = dynamic_feature.shape[1]
     n_output = labels.shape[1]
 
-    model = CA_RNN(num_features,
-                   time_steps,
-                   ExperimentSetup.lstm_size,
-                   n_output,
-                   batch_size=ExperimentSetup.batch_size,
-                   epochs=ExperimentSetup.epochs,
-                   output_n_epoch=ExperimentSetup.output_n_epochs)
+    if event_type == "qx":
+        learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_qx_setup.all
+    elif event_type == "cx":
+        learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_cx_setup.all
+    else:
+        learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
+
+    model = ContextAttentionRNN(num_features=num_features,
+                                time_steps=time_steps,
+                                lstm_size=ExperimentSetup.hidden_size,
+                                n_output=n_output,
+                                batch_size=ExperimentSetup.batch_size,
+                                epochs=ExperimentSetup.epochs,
+                                output_n_epoch=ExperimentSetup.output_n_epochs,
+                                learning_rate=learning_rate,
+                                max_loss=max_loss,
+                                max_pace=max_pace,
+                                lasso=lasso,
+                                ridge=ridge)
 
     if not os.path.exists("result_" + event_type):
         os.makedirs("result_" + event_type)
@@ -268,12 +338,24 @@ def logistic_regression_experiments(event_type):
     time_steps = dynamic_feature.shape[1]
     n_output = labels.shape[1]
 
-    model = LogisticRegression(num_features,
-                               time_steps,
-                               n_output,
+    if event_type == "qx":
+        learning_rate, max_loss, max_pace, lasso, ridge = lr_qx_setup.all
+    elif event_type == "cx":
+        learning_rate, max_loss, max_pace, lasso, ridge = lr_cx_setup.all
+    else:
+        learning_rate, max_loss, max_pace, lasso, ridge = lr_xycj_setup.all
+
+    model = LogisticRegression(num_features=num_features,
+                               time_steps=time_steps,
+                               n_output=n_output,
                                batch_size=ExperimentSetup.batch_size,
                                epochs=ExperimentSetup.epochs,
-                               output_n_epoch=ExperimentSetup.output_n_epochs)
+                               output_n_epoch=ExperimentSetup.output_n_epochs,
+                               learning_rate=learning_rate,
+                               max_loss=max_loss,
+                               max_pace=max_pace,
+                               lasso=lasso,
+                               ridge=ridge)
 
     if not os.path.exists("result_" + event_type):
         os.makedirs("result_" + event_type)
@@ -290,13 +372,25 @@ def multi_layer_perceptron_experiments(event_type):
     time_steps = dynamic_feature.shape[1]
     n_output = labels.shape[1]
 
+    if event_type == "qx":
+        learning_rate, max_loss, max_pace, lasso, ridge = mlp_qx_setup.all
+    elif event_type == "cx":
+        learning_rate, max_loss, max_pace, lasso, ridge = mlp_cx_setup.all
+    else:
+        learning_rate, max_loss, max_pace, lasso, ridge = mlp_xycj_setup.all
+
     model = MultiLayerPerceptron(num_features,
                                  time_steps,
-                                 hidden_units=ExperimentSetup.lstm_size,
+                                 hidden_units=ExperimentSetup.hidden_size,
                                  n_output=n_output,
                                  batch_size=ExperimentSetup.batch_size,
                                  epochs=ExperimentSetup.epochs,
-                                 output_n_epoch=ExperimentSetup.output_n_epochs)
+                                 output_n_epoch=ExperimentSetup.output_n_epochs,
+                                 learning_rate=learning_rate,
+                                 max_loss=max_loss,
+                                 max_pace=max_pace,
+                                 lasso=lasso,
+                                 ridge=ridge)
 
     if not os.path.exists("result_" + event_type):
         os.makedirs("result_" + event_type)
@@ -306,6 +400,6 @@ def multi_layer_perceptron_experiments(event_type):
 
 if __name__ == '__main__':
     # bidirectional_lstm_model_experiments('qx')
-    # context_attention_rnn_experiments('qx')
-    # logistic_regression_experiments("qx")
+    context_attention_rnn_experiments('qx')
+    logistic_regression_experiments("qx")
     multi_layer_perceptron_experiments("qx")

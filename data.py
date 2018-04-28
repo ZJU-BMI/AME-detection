@@ -13,10 +13,10 @@ class DataSet(object):
         self._index_in_epoch = 0
 
     def next_batch(self, batch_size):
-        if batch_size > self.num_examples:
-            raise ValueError('The size of one batch: {} should be less than the total number of '
-                             'data: {}'.format(batch_size, self.num_examples))
-
+        if batch_size > self.num_examples or batch_size <= 0:
+            # raise ValueError('The size of one batch: {} should be less than the total number of '
+            #                  'data: {}'.format(batch_size, self.num_examples))
+            batch_size = self._labels.shape[0]
         start = self._index_in_epoch
         if start + batch_size > self.num_examples:
             self._epoch_completed += 1
