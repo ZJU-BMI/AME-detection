@@ -50,10 +50,10 @@ class BasicLSTMModel(object):
                                         name='loss')
             # TODO 后续加入正则
             if lasso != 0:
-                for trainable_variables in tf.trainable_variables():
+                for trainable_variables in tf.trainable_variables(self._name):
                     self._loss += tf.contrib.layers.l1_regularizer(lasso)(trainable_variables)
             if ridge != 0:
-                for trainable_variables in tf.trainable_variables():
+                for trainable_variables in tf.trainable_variables(self._name):
                     self._loss += tf.contrib.layers.l2_regularizer(ridge)(trainable_variables)
 
             self._train_op = optimizer(learning_rate).minimize(self._loss)
@@ -80,7 +80,7 @@ class BasicLSTMModel(object):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
-        for c in tf.trainable_variables():
+        for c in tf.trainable_variables(self._name):
             print(c.name)
 
         print("epoch\tloss\tloss_diff\tcount")
@@ -177,9 +177,9 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
     def fit(self, data_set):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
-        for c in tf.trainable_variables():
+
+        for c in tf.trainable_variables(self._name):
             print(c.name)
-        # TODO 此步耗时过长，待检验
         # data_set = DataSet(self._attention(data_set), data_set.labels)
 
         logged = set()
@@ -243,10 +243,10 @@ class LogisticRegression(object):
             self._loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self._y, logits=self._output),
                                         name='loss')
             if lasso != 0:
-                for trainable_variables in tf.trainable_variables():
+                for trainable_variables in tf.trainable_variables(self._name):
                     self._loss += tf.contrib.layers.l1_regularizer(lasso)(trainable_variables)
             if ridge != 0:
-                for trainable_variables in tf.trainable_variables():
+                for trainable_variables in tf.trainable_variables(self._name):
                     self._loss += tf.contrib.layers.l2_regularizer(ridge)(trainable_variables)
 
             self._train_op = optimizer(learning_rate).minimize(self._loss)
@@ -258,7 +258,7 @@ class LogisticRegression(object):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
-        for c in tf.trainable_variables():
+        for c in tf.trainable_variables(self._name):
             print(c.name)
 
         print("epoch\tloss\tloss_diff")
