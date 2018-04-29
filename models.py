@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from data import DataSet
+from sklearn.metrics import roc_auc_score
 import time
 
 
@@ -76,14 +76,14 @@ class BasicLSTMModel(object):
         length = tf.cast(length, tf.int32)  # 类型转换
         return mask, length
 
-    def fit(self, data_set):
+    def fit(self, data_set, test_set):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
         for c in tf.trainable_variables(self._name):
             print(c.name)
 
-        print("epoch\tloss\tloss_diff\tcount")
+        print("auc\tepoch\tloss\tloss_diff\tcount")
         logged = set()
         loss = 0
         count = 0
@@ -98,7 +98,9 @@ class BasicLSTMModel(object):
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels})
                 loss_diff = loss_prev - loss
-                print("{}\t{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff, count),
+                y_score = self.predict(test_set)
+                auc = roc_auc_score(test_set.labels, y_score)
+                print("{}\t{}\t{}\t{}\t{}".format(auc, data_set.epoch_completed, loss, loss_diff, count),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
                 # 训练停止条件
                 if loss > self._max_loss:
@@ -174,12 +176,14 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                 context_embedding_matrix[j, k, :] = context_embedding
         return context_embedding_matrix
 
-    def fit(self, data_set):
+    def fit(self, data_set, test_set):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
         for c in tf.trainable_variables(self._name):
             print(c.name)
+
+        print("auc\tepoch\tloss\tloss_diff\tcount")
         # data_set = DataSet(self._attention(data_set), data_set.labels)
 
         logged = set()
@@ -198,7 +202,9 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels})
                 loss_diff = loss_prev - loss
-                print("{}\t{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff, count),
+                y_score = self.predict(test_set)
+                auc = roc_auc_score(test_set.labels, y_score)
+                print("{}\t{}\t{}\t{}\t{}".format(auc, data_set.epoch_completed, loss, loss_diff, count),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
                 # 训练停止条件
                 if loss > self._max_loss:
@@ -254,14 +260,14 @@ class LogisticRegression(object):
     def _hidden_layer(self):
         self._hidden_rep = self._x
 
-    def fit(self, data_set):
+    def fit(self, data_set, test_set):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
         for c in tf.trainable_variables(self._name):
             print(c.name)
 
-        print("epoch\tloss\tloss_diff")
+        print("auc\tepoch\tloss\tloss_diff\tcount")
 
         logged = set()
         loss = 0
@@ -279,7 +285,10 @@ class LogisticRegression(object):
                     self._x: data_set.dynamic_feature.reshape([-1, self._time_steps * self._num_features]),
                     self._y: data_set.labels})
                 loss_diff = loss_prev - loss
-                print("{}\t{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff, count))
+                y_score = self.predict(test_set)
+                auc = roc_auc_score(test_set.labels, y_score)
+                print("{}\t{}\t{}\t{}\t{}".format(auc, data_set.epoch_completed, loss, loss_diff, count),
+                      time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
                 # 训练停止条件
                 if loss > self._max_loss:
                     count = 0
