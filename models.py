@@ -49,15 +49,14 @@ class BasicLSTMModel(object):
             self._loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self._y, logits=self._output),
                                         name='loss')
             # TODO 后续加入正则
-            # for trainable_variables in tf.trainable_variables():
-            #     self._loss += tf.contrib.layers.l1_regularizer(lasso)(trainable_variables)
-            #     self._loss += tf.contrib.layers.l2_regularizer(lasso)(trainable_variables)
+            if lasso != 0:
+                for trainable_variables in tf.trainable_variables():
+                    self._loss += tf.contrib.layers.l1_regularizer(lasso)(trainable_variables)
+            if ridge != 0:
+                for trainable_variables in tf.trainable_variables():
+                    self._loss += tf.contrib.layers.l2_regularizer(ridge)(trainable_variables)
 
             self._train_op = optimizer(learning_rate).minimize(self._loss)
-
-    @property
-    def name(self):
-        return self._name
 
     def _hidden_layer(self):
         lstm = tf.contrib.rnn.BasicLSTMCell(self._lstm_size)  # ??????
@@ -81,6 +80,10 @@ class BasicLSTMModel(object):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
+        for c in tf.trainable_variables():
+            print(c.name)
+
+        print("epoch\tloss\tloss_diff\tcount")
         logged = set()
         loss = 0
         count = 0
@@ -95,8 +98,9 @@ class BasicLSTMModel(object):
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels})
                 loss_diff = loss_prev - loss
-                print("{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff),
+                print("{}\t{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff, count),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+                # 训练停止条件
                 if loss > self._max_loss:
                     count = 0
                 else:
@@ -147,13 +151,14 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         super().__init__(num_features, time_steps, lstm_size, n_output, batch_size, epochs, output_n_epoch,
                          learning_rate, max_loss, max_pace, lasso, ridge, optimizer, name)
 
-    def _attention(self, dataset):
-        x = dataset.dynamic_feature
+    # TODO 后续再做调整：1.time_step在原有基础上+10（attention机制后前后各多出5个）；2.attention计算时考虑长度，减计算量
+    def _attention(self, x):
         word_embedding_matrix = np.zeros([x.shape[0], self._time_steps + 10, 100], dtype=np.float32)
         word_embedding_matrix[:, 5:self._time_steps + 5, :] = x.reshape([-1, self._time_steps, 100])
         context_embedding_matrix = np.zeros([x.shape[0], self._time_steps, 100])
+        length = np.sum(np.sign(np.max(np.abs(x), 2)), 1).astype(np.int32)
         for j in range(x.shape[0]):
-            for k in range(self._time_steps):
+            for k in range(np.min((length[j] + 5, 80))):  # 此处暂时按照原版验证效果是否一致，之后再做修改
                 words_2n = np.zeros([10, 100], dtype=np.float32)
                 word_k = word_embedding_matrix[j, k + 5, :].astype(np.float32)
                 words_2n[0:5, :] = word_embedding_matrix[j, k:k + 5, :]
@@ -172,11 +177,10 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
     def fit(self, data_set):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
-        # for c in tf.trainable_variables():
-        #     print(c.name)
+        for c in tf.trainable_variables():
+            print(c.name)
         # TODO 此步耗时过长，待检验
-        data_set = DataSet(self._attention(data_set), data_set.labels)
-
+        # data_set = DataSet(self._attention(data_set), data_set.labels)
 
         logged = set()
         loss = 0
@@ -184,7 +188,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         # TODO 迭代停止条件改写已完成， 若试参可逐步显示各指标
         while data_set.epoch_completed < self._epochs:
             dynamic_feature, labels = data_set.next_batch(self._batch_size)
-
+            dynamic_feature = self._attention(dynamic_feature)
             self._sess.run(self._train_op, feed_dict={self._x: dynamic_feature,
                                                       self._y: labels})
 
@@ -194,8 +198,9 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels})
                 loss_diff = loss_prev - loss
-                print("{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff),
+                print("{}\t{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff, count),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+                # 训练停止条件
                 if loss > self._max_loss:
                     count = 0
                 else:
@@ -237,15 +242,14 @@ class LogisticRegression(object):
 
             self._loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self._y, logits=self._output),
                                         name='loss')
-            for trainable_variables in tf.trainable_variables():
-                self._loss += tf.contrib.layers.l1_regularizer(lasso)(trainable_variables)
-                self._loss += tf.contrib.layers.l2_regularizer(lasso)(trainable_variables)
+            if lasso != 0:
+                for trainable_variables in tf.trainable_variables():
+                    self._loss += tf.contrib.layers.l1_regularizer(lasso)(trainable_variables)
+            if ridge != 0:
+                for trainable_variables in tf.trainable_variables():
+                    self._loss += tf.contrib.layers.l2_regularizer(ridge)(trainable_variables)
 
             self._train_op = optimizer(learning_rate).minimize(self._loss)
-
-    @property
-    def name(self):
-        return self._name
 
     def _hidden_layer(self):
         self._hidden_rep = self._x
@@ -254,10 +258,10 @@ class LogisticRegression(object):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
-        print("epoch\tloss\tloss_diff")
+        for c in tf.trainable_variables():
+            print(c.name)
 
-        # for c in tf.trainable_variables():
-        #     print(c.name)
+        print("epoch\tloss\tloss_diff")
 
         logged = set()
         loss = 0
@@ -275,8 +279,8 @@ class LogisticRegression(object):
                     self._x: data_set.dynamic_feature.reshape([-1, self._time_steps * self._num_features]),
                     self._y: data_set.labels})
                 loss_diff = loss_prev - loss
-                print("{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff),
-                      time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+                print("{}\t{}\t{}\t{}".format(data_set.epoch_completed, loss, loss_diff, count))
+                # 训练停止条件
                 if loss > self._max_loss:
                     count = 0
                 else:

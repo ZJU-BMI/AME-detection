@@ -17,7 +17,7 @@ class ExperimentSetup(object):
     kfold = 5
     batch_size = 64
     hidden_size = 128
-    epochs = 200
+    epochs = 3
     output_n_epochs = 1
 
     def __init__(self, learning_rate=0.01, max_loss=2.0, max_pace=0.01, lasso=0.0, ridge=0.0):
@@ -65,7 +65,7 @@ ca_rnn_xycj_setup = ExperimentSetup(0.001, 0.1, 0.0025)
 lr_cx_setup = ExperimentSetup(0.01, 2, 0.001, 0.001, 0.01)
 mlp_cx_setup = ExperimentSetup(0.01, 2, 0.1, 0.0001, 0.001)
 bi_lstm_cx_setup = ExperimentSetup(0.01, 0.4, 0.04)
-ca_rnn_cx_setup = ExperimentSetup(0.01, 0.1, 0.002)
+ca_rnn_cx_setup = ExperimentSetup(0.01, 0.1, 0.0025)
 
 
 def evaluate(test_index, y_label, y_score, file_name):
@@ -230,18 +230,19 @@ def model_experiments(model, data_set, filename):
         train_dynamic_res, train_y_res = imbalance_preprocess(train_dynamic, train_y)  # SMOTE过采样方法处理不平衡数据集
         train_set = DataSet(train_dynamic_res, train_y_res)
 
-        model.fit(train_set)
-
         test_dynamic = dynamic_feature[test_idx]
         test_y = labels[test_idx]
         test_set = DataSet(test_dynamic, test_y)
+
+        model.fit(train_set)
 
         y_score = model.predict(test_set)
 
         tol_test_index = np.concatenate((tol_test_index, test_idx))
         tol_pred = np.vstack((tol_pred, y_score))
         tol_label = np.vstack((tol_label, test_y))
-        print("Cross validation: {} of {}".format(i, ExperimentSetup.kfold))
+        print("Cross validation: {} of {}".format(i, ExperimentSetup.kfold),
+              time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
         i += 1
     return evaluate(tol_test_index, tol_label, tol_pred, filename)
 
