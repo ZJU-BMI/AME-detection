@@ -310,9 +310,8 @@ class MultiLayerPerceptron(LogisticRegression):
                  learning_rate=0.01, max_loss=2.0, max_pace=0.1, lasso=0.0, ridge=0.0, optimizer=tf.train.AdamOptimizer,
                  name='MLPModel'):
         self._hidden_units = hidden_units
-        self._n_output = n_output
         super().__init__(num_features, time_steps, n_output, batch_size, epochs, output_n_epoch, learning_rate,
                          max_loss, max_pace, lasso, ridge, optimizer, name)
 
     def _hidden_layer(self):
-        self._hidden_rep = tf.contrib.layers.fully_connected(self._x, self._n_output)
+        self._hidden_rep = tf.nn.relu(tf.contrib.layers.fully_connected(self._x, self._hidden_units))
