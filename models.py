@@ -146,12 +146,68 @@ class BidirectionalLSTMModel(BasicLSTMModel):
 class ContextAttentionRNN(BidirectionalLSTMModel):
     def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
                  learning_rate=0.01, max_loss=0.5, max_pace=0.01, lasso=0.0, ridge=0.0,
-                 optimizer=tf.train.AdamOptimizer, name="CA-RNN"):
+                 optimizer=tf.train.AdamOptimizer, name='BasicLSTMModel'):
+
+        self._num_features = num_features
+        self._epochs = epochs
         self._name = name
+        self._batch_size = batch_size
+        self._output_n_epoch = output_n_epoch
+        self._lstm_size = lstm_size
+        self._time_steps = time_steps
+        self._max_loss = max_loss
+        self._max_pace = max_pace
+        self._lasso = lasso
+        self._ridge = ridge
+
+        print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace)
+
         with tf.variable_scope(self._name):
-            self._W_trans = tf.Variable(tf.truncated_normal([10, 100], stddev=0.1))
-        super().__init__(num_features, time_steps, lstm_size, n_output, batch_size, epochs, output_n_epoch,
-                         learning_rate, max_loss, max_pace, lasso, ridge, optimizer, name)
+            self._x = tf.placeholder(tf.float32, [None, time_steps, num_features], 'input')
+            self._y = tf.placeholder(tf.float32, [None, n_output], 'label')
+            self._v = tf.placeholder(tf.float32, [None, time_steps, num_features, 10], "contextual_words")
+
+            self._sess = tf.Session()  # 会话
+
+            self._W_trans = tf.Variable(tf.truncated_normal([1, 100], stddev=0.1))
+
+            self._attention_mechanism()
+
+            self._hidden_layer()
+
+            self._output = tf.contrib.layers.fully_connected(self._hidden_rep, n_output,
+                                                             activation_fn=tf.identity)  # 输出层
+            self._pred = tf.nn.sigmoid(self._output, name="pred")
+
+            self._loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self._y, logits=self._output),
+                                        name='loss')
+            # TODO 后续加入正则
+            if lasso != 0:
+                for trainable_variables in tf.trainable_variables(self._name):
+                    self._loss += tf.contrib.layers.l1_regularizer(lasso)(trainable_variables)
+            if ridge != 0:
+                for trainable_variables in tf.trainable_variables(self._name):
+                    self._loss += tf.contrib.layers.l2_regularizer(ridge)(trainable_variables)
+
+            self._train_op = optimizer(learning_rate).minimize(self._loss)
+
+    def _hidden_layer(self):
+        self._lstm = {}
+        self._init_state = {}
+        for direction in ['forward', 'backward']:
+            self._lstm[direction] = tf.contrib.rnn.BasicLSTMCell(self._lstm_size)
+            self._init_state[direction] = self._lstm[direction].zero_state(tf.shape(self._x)[0], tf.float32)
+
+        mask, length = self._length()
+        self._hidden, _ = tf.nn.bidirectional_dynamic_rnn(self._lstm['forward'],
+                                                          self._lstm['backward'],
+                                                          self._context,
+                                                          sequence_length=length,
+                                                          initial_state_fw=self._init_state['forward'],
+                                                          initial_state_bw=self._init_state['backward'])
+        self._hidden_concat = tf.concat(self._hidden, axis=2)  # n_samples×time_steps×2lstm_size→n_samples×2lstm_size
+        self._hidden_rep = tf.reduce_sum(self._hidden_concat, 1) / tf.tile(tf.reduce_sum(mask, 1, keep_dims=True),
+                                                                           (1, self._lstm_size * 2))
 
     # TODO 后续再做调整：1.time_step在原有基础上+10（attention机制后前后各多出5个）；2.attention计算时考虑长度，减计算量
     def _attention(self, x):
@@ -176,6 +232,20 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                 context_embedding_matrix[j, k, :] = context_embedding
         return context_embedding_matrix
 
+    def _attention_mechanism(self):
+        # xp = tf.concat(
+        #     [tf.concat([tf.zeros([5, self._num_features]), self._x], 0), tf.zeros([None,5, self._num_features])], 0)
+        # zeros = tf.constant(tf.zeros([None, 5, self._num_features], dtype=tf.float32))
+        # xp = tf.concat([zeros, self._x], 1)
+        W_x = tf.tile(self._W_trans, [self._time_steps, 1])
+        W_v = tf.tile(tf.reshape(self._W_trans, [1, -1, 1]), [self._time_steps, 1, 10])
+        x_trans = tf.nn.tanh(tf.multiply(self._x, tf.tile(self._W_trans, [self._time_steps, 1])))
+        v_trans = tf.nn.tanh(tf.multiply(self._v, W_v))
+        a = tf.matmul(tf.reshape(x_trans, [-1, self._time_steps, 1, self._num_features]), v_trans)
+        z = tf.transpose(tf.nn.softmax(a), [0, 1, 3, 2])
+        context = tf.matmul(self._v, z)
+        self._context = tf.reshape(context,[-1,self._time_steps,self._num_features])
+
     def fit(self, data_set, test_set):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
@@ -192,7 +262,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         # TODO 迭代停止条件改写已完成， 若试参可逐步显示各指标
         while data_set.epoch_completed < self._epochs:
             dynamic_feature, labels = data_set.next_batch(self._batch_size)
-            dynamic_feature = self._attention(dynamic_feature)
+            # dynamic_feature = self._attention(dynamic_feature)
             self._sess.run(self._train_op, feed_dict={self._x: dynamic_feature,
                                                       self._y: labels})
 

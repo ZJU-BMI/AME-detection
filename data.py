@@ -64,6 +64,31 @@ class DataSet(object):
         self._epoch_completed = value
 
 
+class DataSetWithContext(DataSet):
+    def __init__(self, dynamic_feature, labels):
+        super().__init__(dynamic_feature, labels)
+        self._contextual_words()
+        self._context = self._contextual_words()
+
+    def _contextual_words(self):
+        shape = self.dynamic_feature.shape
+        contextual_word_embedding_matrix = np.zeros([shape[0], shape[1], shape[2], 10])
+        padded_word_embedding_maxtrix = np.zeros([shape[0], shape[1] + 10, shape[2]])
+        padded_word_embedding_maxtrix[:, 5:shape[1] + 5, :] = self.dynamic_feature
+        for i in range(shape[0]):
+            for j in range(shape[1]):
+                for k in range(5):
+                    contextual_word_embedding_matrix[i, j, :, k] = np.transpose(
+                        padded_word_embedding_maxtrix[i, j + k, :])
+                    contextual_word_embedding_matrix[i, j, :, k + 5] = np.transpose(
+                        padded_word_embedding_maxtrix[i, j + k + 6, :])
+        return contextual_word_embedding_matrix
+
+    @property
+    def context(self):
+        return self._context
+
+
 def read_data():
     # TODO 改为switch形式，选择读取不同事件
     dynamic_features = pickle.load(open("input_file_np_1000f_xjqx+_80w.pkl", "rb"))

@@ -9,7 +9,7 @@ from imblearn.over_sampling import SMOTE
 import numpy as np
 
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, roc_curve  # roc计算曲线
-from data import read_data, DataSet
+from data import read_data, DataSet, DataSetWithContext
 from models import BidirectionalLSTMModel, ContextAttentionRNN, LogisticRegression, MultiLayerPerceptron
 
 
@@ -226,17 +226,25 @@ def model_experiments(model, data_set, filename):
     for train_idx, test_idx in kf.split(X=data_set.dynamic_feature, y=data_set.labels.reshape(-1)):  # 五折交叉
         train_dynamic = dynamic_feature[train_idx]
         train_y = labels[train_idx]
-
         train_dynamic_res, train_y_res = imbalance_preprocess(train_dynamic, train_y)  # SMOTE过采样方法处理不平衡数据集
-        train_set = DataSet(train_dynamic_res, train_y_res)
 
         test_dynamic = dynamic_feature[test_idx]
         test_y = labels[test_idx]
-        test_set = DataSet(test_dynamic, test_y)
+        if model.name == "CA-RNN":
+            # TODO: model里加获取name的方法,data里加DataSetWithContext类
+            train_set = DataSetWithContext(train_dynamic_res, train_y_res)
+            test_set = DataSetWithContext(test_dynamic, test_y)
 
-        model.fit(train_set, test_set)
+            model.fit(train_set, test_set)
 
-        y_score = model.predict(test_set)
+            y_score = model.predict(test_set)
+        else:
+            train_set = DataSet(train_dynamic_res, train_y_res)
+            test_set = DataSet(test_dynamic, test_y)
+
+            model.fit(train_set, test_set)
+
+            y_score = model.predict(test_set)
 
         tol_test_index = np.concatenate((tol_test_index, test_idx))
         tol_pred = np.vstack((tol_pred, y_score))
@@ -401,6 +409,6 @@ def multi_layer_perceptron_experiments(event_type):
 
 if __name__ == '__main__':
     # bidirectional_lstm_model_experiments('qx')
-    # context_attention_rnn_experiments('qx')
+    context_attention_rnn_experiments('qx')
     # logistic_regression_experiments("qx")
     multi_layer_perceptron_experiments("qx")
