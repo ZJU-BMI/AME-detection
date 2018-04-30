@@ -116,6 +116,10 @@ class BasicLSTMModel(object):
     def predict(self, test_set):
         return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature})
 
+    @property
+    def name(self):
+        return self._name
+
 
 class BidirectionalLSTMModel(BasicLSTMModel):
     def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
@@ -146,7 +150,7 @@ class BidirectionalLSTMModel(BasicLSTMModel):
 class ContextAttentionRNN(BidirectionalLSTMModel):
     def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
                  learning_rate=0.01, max_loss=0.5, max_pace=0.01, lasso=0.0, ridge=0.0,
-                 optimizer=tf.train.AdamOptimizer, name='BasicLSTMModel'):
+                 optimizer=tf.train.AdamOptimizer, name='CA-RNN'):
 
         self._num_features = num_features
         self._epochs = epochs
@@ -209,42 +213,17 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         self._hidden_rep = tf.reduce_sum(self._hidden_concat, 1) / tf.tile(tf.reduce_sum(mask, 1, keep_dims=True),
                                                                            (1, self._lstm_size * 2))
 
-    # TODO 后续再做调整：1.time_step在原有基础上+10（attention机制后前后各多出5个）；2.attention计算时考虑长度，减计算量
-    def _attention(self, x):
-        word_embedding_matrix = np.zeros([x.shape[0], self._time_steps + 10, 100], dtype=np.float32)
-        word_embedding_matrix[:, 5:self._time_steps + 5, :] = x.reshape([-1, self._time_steps, 100])
-        context_embedding_matrix = np.zeros([x.shape[0], self._time_steps, 100])
-        length = np.sum(np.sign(np.max(np.abs(x), 2)), 1).astype(np.int32)
-        for j in range(x.shape[0]):
-            for k in range(np.min((length[j] + 5, 80))):  # 此处暂时按照原版验证效果是否一致，之后再做修改
-                words_2n = np.zeros([10, 100], dtype=np.float32)
-                word_k = word_embedding_matrix[j, k + 5, :].astype(np.float32)
-                words_2n[0:5, :] = word_embedding_matrix[j, k:k + 5, :]
-                words_2n[5:10, :] = word_embedding_matrix[j, k + 6:k + 11, :]
-                w_c = self._W_trans.eval(self._sess)
-                words_2n_trans = np.tanh(np.multiply(words_2n, w_c))
-                z = np.zeros(10)
-                for n in range(10):
-                    z[n] = words_2n_trans[n:n + 1, :] @ word_k.reshape([len(word_k), 1])
-                z = z - np.max(z)
-                z_sm = np.exp(z) / np.sum(np.exp(z))
-                context_embedding = np.matmul(z_sm, words_2n)
-                context_embedding_matrix[j, k, :] = context_embedding
-        return context_embedding_matrix
+    # TODO 后续再做调整：1.time_step在原有基础上+10（attention机制后前后各多出5个）
 
     def _attention_mechanism(self):
-        # xp = tf.concat(
-        #     [tf.concat([tf.zeros([5, self._num_features]), self._x], 0), tf.zeros([None,5, self._num_features])], 0)
-        # zeros = tf.constant(tf.zeros([None, 5, self._num_features], dtype=tf.float32))
-        # xp = tf.concat([zeros, self._x], 1)
         W_x = tf.tile(self._W_trans, [self._time_steps, 1])
         W_v = tf.tile(tf.reshape(self._W_trans, [1, -1, 1]), [self._time_steps, 1, 10])
-        x_trans = tf.nn.tanh(tf.multiply(self._x, tf.tile(self._W_trans, [self._time_steps, 1])))
+        x_trans = tf.nn.tanh(tf.multiply(self._x, W_x))
         v_trans = tf.nn.tanh(tf.multiply(self._v, W_v))
         a = tf.matmul(tf.reshape(x_trans, [-1, self._time_steps, 1, self._num_features]), v_trans)
         z = tf.transpose(tf.nn.softmax(a), [0, 1, 3, 2])
         context = tf.matmul(self._v, z)
-        self._context = tf.reshape(context,[-1,self._time_steps,self._num_features])
+        self._context = tf.reshape(context, [-1, self._time_steps, self._num_features])
 
     def fit(self, data_set, test_set):
         self._sess.run(tf.global_variables_initializer())
@@ -261,16 +240,18 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         count = 0
         # TODO 迭代停止条件改写已完成， 若试参可逐步显示各指标
         while data_set.epoch_completed < self._epochs:
-            dynamic_feature, labels = data_set.next_batch(self._batch_size)
+            dynamic_feature, labels, context = data_set.next_batch(self._batch_size)
             # dynamic_feature = self._attention(dynamic_feature)
             self._sess.run(self._train_op, feed_dict={self._x: dynamic_feature,
-                                                      self._y: labels})
+                                                      self._y: labels,
+                                                      self._v: context})
 
             if data_set.epoch_completed % self._output_n_epoch == 0 and data_set.epoch_completed not in logged:
                 logged.add(data_set.epoch_completed)
                 loss_prev = loss
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
-                                                             self._y: data_set.labels})
+                                                             self._y: data_set.labels,
+                                                             self._v: data_set.context})
                 loss_diff = loss_prev - loss
                 y_score = self.predict(test_set)
                 auc = roc_auc_score(test_set.labels, y_score)
@@ -286,6 +267,9 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                         count += 1
                 if count > 9:
                     break
+
+    def predict(self, test_set):
+        return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature,self._v: test_set.context})
 
 
 class LogisticRegression(object):
@@ -373,6 +357,10 @@ class LogisticRegression(object):
     def predict(self, test_set):
         return self._sess.run(self._pred, feed_dict={
             self._x: test_set.dynamic_feature.reshape([-1, self._time_steps * self._num_features])})
+
+    @property
+    def name(self):
+        return self._name
 
 
 class MultiLayerPerceptron(LogisticRegression):

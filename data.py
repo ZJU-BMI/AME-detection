@@ -84,6 +84,34 @@ class DataSetWithContext(DataSet):
                         padded_word_embedding_maxtrix[i, j + k + 6, :])
         return contextual_word_embedding_matrix
 
+    def next_batch(self, batch_size):
+        if batch_size > self.num_examples or batch_size <= 0:
+            # raise ValueError('The size of one batch: {} should be less than the total number of '
+            #                  'data: {}'.format(batch_size, self.num_examples))
+            batch_size = self._labels.shape[0]
+        start = self._index_in_epoch
+        if start + batch_size > self.num_examples:
+            self._epoch_completed += 1
+            rest_num_examples = self._num_examples - start  # 旧epoch中剩余部分
+            dynamic_rest_part = self._dynamic_feature[start:self._num_examples]
+            label_rest_part = self._labels[start:self._num_examples]
+            context_rest_part = self._context[start:self._num_examples]
+
+            self._shuffle()  # 打乱,在一个新的epoch里重新打乱
+            start = 0
+            self._index_in_epoch = batch_size - rest_num_examples
+            end = self._index_in_epoch
+            dynamic_new_part = self._dynamic_feature[start:end]
+            label_new_part = self._labels[start:end]
+            context_new_part = self._context[start:end]
+            return (np.concatenate((dynamic_rest_part, dynamic_new_part), axis=0),
+                    np.concatenate((label_rest_part, label_new_part), axis=0),
+                    np.concatenate((context_rest_part, context_new_part), axis=0))
+        else:
+            self._index_in_epoch += batch_size
+            end = self._index_in_epoch
+            return self._dynamic_feature[start:end], self._labels[start:end], self._context[start:end]
+
     @property
     def context(self):
         return self._context

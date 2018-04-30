@@ -408,7 +408,7 @@ def multi_layer_perceptron_experiments(event_type):
 
 
 if __name__ == '__main__':
-    # bidirectional_lstm_model_experiments('qx')
     context_attention_rnn_experiments('qx')
+    bidirectional_lstm_model_experiments('qx')
     # logistic_regression_experiments("qx")
     multi_layer_perceptron_experiments("qx")
