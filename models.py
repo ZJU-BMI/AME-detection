@@ -221,8 +221,8 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         x_trans = tf.nn.tanh(tf.multiply(self._x, W_x))
         v_trans = tf.nn.tanh(tf.multiply(self._v, W_v))
         a = tf.matmul(tf.reshape(x_trans, [-1, self._time_steps, 1, self._num_features]), v_trans)
-        z = tf.transpose(tf.nn.softmax(a), [0, 1, 3, 2])
-        context = tf.matmul(self._v, z)
+        z = tf.nn.softmax(a, 3)
+        context = tf.matmul(z, tf.transpose(self._v, [0, 1, 3, 2]))
         self._context = tf.reshape(context, [-1, self._time_steps, self._num_features])
 
     def fit(self, data_set, test_set):
@@ -269,7 +269,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                     break
 
     def predict(self, test_set):
-        return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature,self._v: test_set.context})
+        return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature, self._v: test_set.context})
 
 
 class LogisticRegression(object):

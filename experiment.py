@@ -55,7 +55,7 @@ class ExperimentSetup(object):
 lr_qx_setup = ExperimentSetup(0.01, 2, 0.01, 0.01, 0.01)
 mlp_qx_setup = ExperimentSetup(0.01, 2, 0.001, 0.0001, 0.001)
 bi_lstm_qx_setup = ExperimentSetup(0.01, 0.5, 0.01)
-ca_rnn_qx_setup = ExperimentSetup(0.1, 0.08, 0.008)
+ca_rnn_qx_setup = ExperimentSetup(0.0001, 0.08, 0.008)
 
 lr_xycj_setup = ExperimentSetup(0.01, 2, 0.004, 0.01, 0.001)
 mlp_xycj_setup = ExperimentSetup(0.01, 2, 0.005, 0.0001, 0.001)
