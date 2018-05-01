@@ -67,7 +67,6 @@ class DataSet(object):
 class DataSetWithContext(DataSet):
     def __init__(self, dynamic_feature, labels):
         super().__init__(dynamic_feature, labels)
-        self._contextual_words()
         self._context = self._contextual_words()
 
     def _contextual_words(self):
@@ -112,6 +111,12 @@ class DataSetWithContext(DataSet):
             end = self._index_in_epoch
             return self._dynamic_feature[start:end], self._labels[start:end], self._context[start:end]
 
+    def _shuffle(self):  # 打乱
+        index = np.arange(self._num_examples)
+        np.random.shuffle(index)
+        self._dynamic_feature = self.dynamic_feature[index]
+        self._labels = self.labels[index]
+        self._context = self._context[index]
     @property
     def context(self):
         return self._context
