@@ -117,15 +117,21 @@ class DataSetWithContext(DataSet):
         self._dynamic_feature = self.dynamic_feature[index]
         self._labels = self.labels[index]
         self._context = self._context[index]
+
     @property
     def context(self):
         return self._context
 
 
-def read_data():
+def read_data(event_type):
     # TODO 改为switch形式，选择读取不同事件
     dynamic_features = pickle.load(open("input_file_np_1000f_xjqx+_80w.pkl", "rb"))
-    labels = pickle.load(open("output_file_np_1000f_xjqx+_80w.pkl", "rb"))[:, -1].reshape([-1, 1])
+    if event_type == "qx":
+        labels = pickle.load(open("output_file_np_1000f_xjqx+_80w.pkl", "rb"))[:, -1].reshape([-1, 1])
+    elif event_type == "xycj":
+        labels = pickle.load(open("output_file_np_1000f_xycj+_80w.pkl", "rb"))[:, -1].reshape([-1, 1])
+    else:
+        labels = pickle.load(open("output_file_np_1000f_cx+_80w.pkl", "rb"))[:, -1].reshape([-1, 1])
     return DataSet(dynamic_features, labels)
 
 

@@ -32,7 +32,8 @@ class BasicLSTMModel(object):
         self._lasso = lasso
         self._ridge = ridge
 
-        print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace)
+        print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace, "lasso=", lasso, "ridge=",
+              ridge)
 
         with tf.variable_scope(self._name):
             self._x = tf.placeholder(tf.float32, [None, time_steps, num_features], 'input')
@@ -164,7 +165,8 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         self._lasso = lasso
         self._ridge = ridge
 
-        print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace)
+        print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace, "lasso=", lasso, "ridge=",
+              ridge)
 
         with tf.variable_scope(self._name):
             self._x = tf.placeholder(tf.float32, [None, time_steps, num_features], 'input')
@@ -287,7 +289,8 @@ class LogisticRegression(object):
         self._max_pace = max_pace
         self._lasso = lasso
         self._ridge = ridge
-        print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace)
+        print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace, "lasso=", lasso, "ridge=",
+              ridge)
         with tf.variable_scope(self._name):
             self._x = tf.placeholder(tf.float32, [None, time_steps * num_features], 'input')
             self._y = tf.placeholder(tf.float32, [None, n_output], 'label')

@@ -55,7 +55,7 @@ class ExperimentSetup(object):
 lr_qx_setup = ExperimentSetup(0.01, 2, 0.01, 0.01, 0.01)
 mlp_qx_setup = ExperimentSetup(0.01, 2, 0.001, 0.0001, 0.001)
 bi_lstm_qx_setup = ExperimentSetup(0.01, 0.5, 0.01)
-ca_rnn_qx_setup = ExperimentSetup(0.0001, 0.08, 0.008)
+ca_rnn_qx_setup = ExperimentSetup(0.01, 0.08, 0.008)
 
 lr_xycj_setup = ExperimentSetup(0.01, 2, 0.004, 0.01, 0.001)
 mlp_xycj_setup = ExperimentSetup(0.01, 2, 0.005, 0.0001, 0.001)
@@ -270,7 +270,7 @@ def imbalance_preprocess(train_dynamic, train_y):  # SMOTE过采样
 
 
 def bidirectional_lstm_model_experiments(event_type):
-    data_set = read_data()
+    data_set = read_data(event_type)
     dynamic_feature = data_set.dynamic_feature
     labels = data_set.labels
 
@@ -278,6 +278,7 @@ def bidirectional_lstm_model_experiments(event_type):
     time_steps = dynamic_feature.shape[1]
     n_output = labels.shape[1]
 
+    print(event_type)
     if event_type == "qx":
         learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_qx_setup.all
     elif event_type == "cx":
@@ -304,7 +305,7 @@ def bidirectional_lstm_model_experiments(event_type):
 
 
 def context_attention_rnn_experiments(event_type):
-    data_set = read_data()
+    data_set = read_data(event_type)
     dynamic_feature = data_set.dynamic_feature
     labels = data_set.labels
 
@@ -312,6 +313,7 @@ def context_attention_rnn_experiments(event_type):
     time_steps = dynamic_feature.shape[1]
     n_output = labels.shape[1]
 
+    print(event_type)
     if event_type == "qx":
         learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_qx_setup.all
     elif event_type == "cx":
@@ -339,7 +341,7 @@ def context_attention_rnn_experiments(event_type):
 
 
 def logistic_regression_experiments(event_type):
-    data_set = read_data()
+    data_set = read_data(event_type)
     dynamic_feature = data_set.dynamic_feature
     labels = data_set.labels
 
@@ -347,6 +349,7 @@ def logistic_regression_experiments(event_type):
     time_steps = dynamic_feature.shape[1]
     n_output = labels.shape[1]
 
+    print(event_type)
     if event_type == "qx":
         learning_rate, max_loss, max_pace, lasso, ridge = lr_qx_setup.all
     elif event_type == "cx":
@@ -373,7 +376,7 @@ def logistic_regression_experiments(event_type):
 
 
 def multi_layer_perceptron_experiments(event_type):
-    data_set = read_data()
+    data_set = read_data(event_type)
     dynamic_feature = data_set.dynamic_feature
     labels = data_set.labels
 
@@ -381,6 +384,7 @@ def multi_layer_perceptron_experiments(event_type):
     time_steps = dynamic_feature.shape[1]
     n_output = labels.shape[1]
 
+    print(event_type)
     if event_type == "qx":
         learning_rate, max_loss, max_pace, lasso, ridge = mlp_qx_setup.all
     elif event_type == "cx":
@@ -408,7 +412,7 @@ def multi_layer_perceptron_experiments(event_type):
 
 
 if __name__ == '__main__':
-    context_attention_rnn_experiments('qx')
-    bidirectional_lstm_model_experiments('qx')
+    context_attention_rnn_experiments('xycj')
+    bidirectional_lstm_model_experiments('xycj')
     # logistic_regression_experiments("qx")
     multi_layer_perceptron_experiments("qx")
