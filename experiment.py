@@ -9,11 +9,12 @@ from imblearn.over_sampling import SMOTE
 import numpy as np
 
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, roc_curve  # roc计算曲线
-from data import read_data, DataSet, DataSetWithContext
+from data import read_data, DataSet
 from models import BidirectionalLSTMModel, ContextAttentionRNN, LogisticRegression, MultiLayerPerceptron
 
 
 class ExperimentSetup(object):
+    # TODO 改
     kfold = 5
     batch_size = 64
     hidden_size = 128
@@ -77,6 +78,7 @@ def evaluate(test_index, y_label, y_score, file_name):
     :param model_name: 使用的模型    used model
     :return: 正确率-accuracy，AUC，召回率-recall，精度-precision， F1值-f1score
     """
+    #TODO 全部算完再写入
     wb = xlwt.Workbook(file_name + '.xls')
     table = wb.add_sheet('Sheet1')
     table_title = ["test_index", "label", "prob", "pre", " ", "fpr", "tpr", "thresholds", " ", "fp", "tp", "fn", "tn",
@@ -160,6 +162,7 @@ def write_result(j, index, y_label, y_score, y_pred_label, table, table_title, s
 
 
 def write_word_statistics(samples, table, table_title, group_name):
+    # TODO 命名需改
     """
     词频统计并写入xls文件
     :param samples: group of collected samples(samples of FP, TP, FN ,TN)
@@ -230,21 +233,13 @@ def model_experiments(model, data_set, filename):
 
         test_dynamic = dynamic_feature[test_idx]
         test_y = labels[test_idx]
-        if model.name == "CA-RNN":
-            # TODO: model里加获取name的方法,data里加DataSetWithContext类
-            train_set = DataSetWithContext(train_dynamic_res, train_y_res)
-            test_set = DataSetWithContext(test_dynamic, test_y)
 
-            model.fit(train_set, test_set)
+        train_set = DataSet(train_dynamic_res, train_y_res)
+        test_set = DataSet(test_dynamic, test_y)
 
-            y_score = model.predict(test_set)
-        else:
-            train_set = DataSet(train_dynamic_res, train_y_res)
-            test_set = DataSet(test_dynamic, test_y)
+        model.fit(train_set, test_set)
 
-            model.fit(train_set, test_set)
-
-            y_score = model.predict(test_set)
+        y_score = model.predict(test_set)
 
         tol_test_index = np.concatenate((tol_test_index, test_idx))
         tol_pred = np.vstack((tol_pred, y_score))
@@ -412,7 +407,8 @@ def multi_layer_perceptron_experiments(event_type):
 
 
 if __name__ == '__main__':
-    context_attention_rnn_experiments('xycj')
-    bidirectional_lstm_model_experiments('xycj')
+    # TODO此处字符串改为constant
+    context_attention_rnn_experiments('qx')
+    bidirectional_lstm_model_experiments('cx')
     # logistic_regression_experiments("qx")
     multi_layer_perceptron_experiments("qx")

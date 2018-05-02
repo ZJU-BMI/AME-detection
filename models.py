@@ -164,6 +164,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         self._max_pace = max_pace
         self._lasso = lasso
         self._ridge = ridge
+        self._template()
 
         print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace, "lasso=", lasso, "ridge=",
               ridge)
@@ -171,7 +172,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         with tf.variable_scope(self._name):
             self._x = tf.placeholder(tf.float32, [None, time_steps, num_features], 'input')
             self._y = tf.placeholder(tf.float32, [None, n_output], 'label')
-            self._v = tf.placeholder(tf.float32, [None, time_steps, num_features, 10], "contextual_words")
+            self._v = tf.placeholder(tf.int32, [time_steps, 10], "context_template")
 
             self._sess = tf.Session()  # 会话
 
@@ -217,14 +218,26 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
 
     # TODO 后续再做调整：1.time_step在原有基础上+10（attention机制后前后各多出5个）
 
+    def _template(self):
+        template_i = np.array([0, 1, 2, 3, 4, 6, 7, 8, 9, 10], dtype=np.int32).reshape([1, -1])
+        add_one = np.ones([10], dtype=np.int32).reshape([1, -1])
+        self._template = np.zeros([0, 10], dtype=np.int32)
+        for i in range(self._time_steps):
+            self._template = np.concatenate([self._template, template_i], 0)
+            template_i = template_i + add_one
+
     def _attention_mechanism(self):
         W_x = tf.tile(self._W_trans, [self._time_steps, 1])
         W_v = tf.tile(tf.reshape(self._W_trans, [1, -1, 1]), [self._time_steps, 1, 10])
+
+        c = tf.gather(tf.pad(self._x, [[0, 0], [5, 5], [0, 0]]), self._v, axis=1)
+
         x_trans = tf.nn.tanh(tf.multiply(self._x, W_x))
-        v_trans = tf.nn.tanh(tf.multiply(self._v, W_v))
-        a = tf.matmul(tf.reshape(x_trans, [-1, self._time_steps, 1, self._num_features]), v_trans)
+        c_trans = tf.nn.tanh(tf.multiply(tf.transpose(c, [0, 1, 3, 2]), W_v))
+
+        a = tf.matmul(tf.reshape(x_trans, [-1, self._time_steps, 1, self._num_features]), c_trans)
         z = tf.nn.softmax(a, 3)
-        context = tf.matmul(z, tf.transpose(self._v, [0, 1, 3, 2]))
+        context = tf.matmul(z, c)
         self._context = tf.reshape(context, [-1, self._time_steps, self._num_features])
 
     def fit(self, data_set, test_set):
@@ -242,18 +255,18 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         count = 0
         # TODO 迭代停止条件改写已完成， 若试参可逐步显示各指标
         while data_set.epoch_completed < self._epochs:
-            dynamic_feature, labels, context = data_set.next_batch(self._batch_size)
+            dynamic_feature, labels = data_set.next_batch(self._batch_size)
             # dynamic_feature = self._attention(dynamic_feature)
             self._sess.run(self._train_op, feed_dict={self._x: dynamic_feature,
                                                       self._y: labels,
-                                                      self._v: context})
+                                                      self._v: self._template})
 
             if data_set.epoch_completed % self._output_n_epoch == 0 and data_set.epoch_completed not in logged:
                 logged.add(data_set.epoch_completed)
                 loss_prev = loss
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels,
-                                                             self._v: data_set.context})
+                                                             self._v: self._template})
                 loss_diff = loss_prev - loss
                 y_score = self.predict(test_set)
                 auc = roc_auc_score(test_set.labels, y_score)
@@ -271,7 +284,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                     break
 
     def predict(self, test_set):
-        return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature, self._v: test_set.context})
+        return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature, self._v: self._template})
 
 
 class LogisticRegression(object):
