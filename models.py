@@ -99,7 +99,8 @@ class BasicLSTMModel(object):
                 loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
                                                              self._y: data_set.labels})
                 loss_diff = loss_prev - loss
-                y_score = self.predict(test_set)
+
+                y_score = self.predict(test_set)  # 此处计算和打印auc仅供调参时观察auc变化用，可删除，与最终输出并无关系
                 auc = roc_auc_score(test_set.labels, y_score)
                 print("{}\t{}\t{}\t{}\t{}".format(auc, data_set.epoch_completed, loss, loss_diff, count),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
@@ -228,12 +229,12 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
 
     def _attention_mechanism(self):
         W_x = tf.tile(self._W_trans, [self._time_steps, 1])
-        W_v = tf.tile(tf.reshape(self._W_trans, [1, -1, 1]), [self._time_steps, 1, 10])
+        W_c = tf.tile(tf.reshape(self._W_trans, [1, -1, 1]), [self._time_steps, 1, 10])
 
         c = tf.gather(tf.pad(self._x, [[0, 0], [5, 5], [0, 0]]), self._v, axis=1)
 
         x_trans = tf.nn.tanh(tf.multiply(self._x, W_x))
-        c_trans = tf.nn.tanh(tf.multiply(tf.transpose(c, [0, 1, 3, 2]), W_v))
+        c_trans = tf.nn.tanh(tf.multiply(tf.transpose(c, [0, 1, 3, 2]), W_c))
 
         a = tf.matmul(tf.reshape(x_trans, [-1, self._time_steps, 1, self._num_features]), c_trans)
         z = tf.nn.softmax(a, 3)
@@ -268,7 +269,8 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                                                              self._y: data_set.labels,
                                                              self._v: self._template})
                 loss_diff = loss_prev - loss
-                y_score = self.predict(test_set)
+
+                y_score = self.predict(test_set)  # 此处计算和打印auc仅供调参时观察auc变化用，可删除，与最终输出并无关系
                 auc = roc_auc_score(test_set.labels, y_score)
                 print("{}\t{}\t{}\t{}\t{}".format(auc, data_set.epoch_completed, loss, loss_diff, count),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
@@ -285,6 +287,33 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
 
     def predict(self, test_set):
         return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature, self._v: self._template})
+
+
+class ContextAttentionRNNWithOrigin(ContextAttentionRNN):
+    def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
+                 learning_rate=0.01, max_loss=0.5, max_pace=0.01, lasso=0.0, ridge=0.0,
+                 optimizer=tf.train.AdamOptimizer, name='CA-RNN-with_origin'):
+        super().__init__(num_features, time_steps, lstm_size, n_output, batch_size, epochs, output_n_epoch,
+                         learning_rate, max_loss, max_pace, lasso, ridge, optimizer, name)
+
+        def _hidden_layer(self):
+            self._lstm = {}
+            self._init_state = {}
+            for direction in ['forward', 'backward']:
+                self._lstm[direction] = tf.contrib.rnn.BasicLSTMCell(self._lstm_size)
+                self._init_state[direction] = self._lstm[direction].zero_state(tf.shape(self._x)[0], tf.float32)
+
+            mask, length = self._length()
+            self._hidden, _ = tf.nn.bidirectional_dynamic_rnn(self._lstm['forward'],
+                                                              self._lstm['backward'],
+                                                              tf.concat([self._context, self._x], 3),
+                                                              sequence_length=length,
+                                                              initial_state_fw=self._init_state['forward'],
+                                                              initial_state_bw=self._init_state['backward'])
+            self._hidden_concat = tf.concat(self._hidden,
+                                            axis=2)  # n_samples×time_steps×2lstm_size→n_samples×2lstm_size
+            self._hidden_rep = tf.reduce_sum(self._hidden_concat, 1) / tf.tile(tf.reduce_sum(mask, 1, keep_dims=True),
+                                                                               (1, self._lstm_size * 2))
 
 
 class LogisticRegression(object):
@@ -355,10 +384,12 @@ class LogisticRegression(object):
                     self._x: data_set.dynamic_feature.reshape([-1, self._time_steps * self._num_features]),
                     self._y: data_set.labels})
                 loss_diff = loss_prev - loss
-                y_score = self.predict(test_set)
+
+                y_score = self.predict(test_set)  # 此处计算和打印auc仅供调参时观察auc变化用，可删除，与最终输出并无关系
                 auc = roc_auc_score(test_set.labels, y_score)
                 print("{}\t{}\t{}\t{}\t{}".format(auc, data_set.epoch_completed, loss, loss_diff, count),
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+
                 # 训练停止条件
                 if loss > self._max_loss:
                     count = 0
