@@ -10,7 +10,8 @@ import numpy as np
 
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, roc_curve  # roc计算曲线
 from data import read_data, DataSet
-from models import BidirectionalLSTMModel, ContextAttentionRNN, LogisticRegression, MultiLayerPerceptron
+from models import BidirectionalLSTMModel, ContextAttentionRNN, LogisticRegression, MultiLayerPerceptron, \
+    ContextAttentionRNNWithOrigin
 
 
 class ExperimentSetup(object):
@@ -72,13 +73,12 @@ ca_rnn_cx_setup = ExperimentSetup(0.01, 0.1, 0.0025)
 def evaluate(test_index, y_label, y_score, file_name):
     """
     对模型的预测性能进行评估
-    :param tol_label: 测试样本的真实标签 true label of test-set
-    :param tol_pred: 测试样本的预测概率 predicted probability of test-set
-    :param event_type: 预测事件类型  target type of AME
-    :param model_name: 使用的模型    used model
-    :return: 正确率-accuracy，AUC，召回率-recall，精度-precision， F1值-f1score
+    :param test_index
+    :param y_label: 测试样本的真实标签 true label of test-set
+    :param y_score: 测试样本的预测概率 predicted probability of test-set
+    :param file_name: 输出文件路径    path of output file
     """
-    #TODO 全部算完再写入
+    # TODO 全部算完再写入
     wb = xlwt.Workbook(file_name + '.xls')
     table = wb.add_sheet('Sheet1')
     table_title = ["test_index", "label", "prob", "pre", " ", "fpr", "tpr", "thresholds", " ", "fp", "tp", "fn", "tn",
@@ -126,13 +126,12 @@ def evaluate(test_index, y_label, y_score, file_name):
             tn_count += 1
 
     # word frequency statistic
-    write_word_statistics(fp_sentences, table, table_title, "fp")
-    write_word_statistics(tp_sentences, table, table_title, "tp")
-    write_word_statistics(fn_sentences, table, table_title, "fn")
-    write_word_statistics(tn_sentences, table, table_title, "tn")
+    write_word_frequency(fp_sentences, table, table_title, "fp")
+    write_word_frequency(tp_sentences, table, table_title, "tp")
+    write_word_frequency(fn_sentences, table, table_title, "fn")
+    write_word_frequency(tn_sentences, table, table_title, "tn")
 
     wb.save(file_name + ".xls")
-    return acc, auc, precision, recall, f1
 
 
 def write_result(j, index, y_label, y_score, y_pred_label, table, table_title, sentence_set, samples, group_name,
@@ -161,7 +160,7 @@ def write_result(j, index, y_label, y_score, y_pred_label, table, table_title, s
     table.write(count, table_title.index(group_name), int(index[j]))
 
 
-def write_word_statistics(samples, table, table_title, group_name):
+def write_word_frequency(samples, table, table_title, group_name):
     # TODO 命名需改
     """
     词频统计并写入xls文件
@@ -172,12 +171,11 @@ def write_word_statistics(samples, table, table_title, group_name):
     :return:
     """
     words = Counter(samples).most_common()
-    j = 1
-    for i in words:
-        (a, b) = i
-        table.write(j, table_title.index(group_name + "_words"), a)
-        table.write(j, table_title.index(group_name + "_freq"), b)
-        j = j + 1
+
+    for i, word_with_freq in enumerate(words):
+        word, freq = word_with_freq
+        table.write(i + 1, table_title.index(group_name + "_words"), word)
+        table.write(i + 1, table_title.index(group_name + "_freq"), freq)
 
 
 def plot_roc(test_labels, test_predictions, table, table_title, filename):
@@ -316,18 +314,18 @@ def context_attention_rnn_experiments(event_type):
     else:
         learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
 
-    model = ContextAttentionRNN(num_features=num_features,
-                                time_steps=time_steps,
-                                lstm_size=ExperimentSetup.hidden_size,
-                                n_output=n_output,
-                                batch_size=ExperimentSetup.batch_size,
-                                epochs=ExperimentSetup.epochs,
-                                output_n_epoch=ExperimentSetup.output_n_epochs,
-                                learning_rate=learning_rate,
-                                max_loss=max_loss,
-                                max_pace=max_pace,
-                                lasso=lasso,
-                                ridge=ridge)
+    model = ContextAttentionRNNWithOrigin(num_features=num_features,
+                                          time_steps=time_steps,
+                                          lstm_size=ExperimentSetup.hidden_size,
+                                          n_output=n_output,
+                                          batch_size=ExperimentSetup.batch_size,
+                                          epochs=ExperimentSetup.epochs,
+                                          output_n_epoch=ExperimentSetup.output_n_epochs,
+                                          learning_rate=learning_rate,
+                                          max_loss=max_loss,
+                                          max_pace=max_pace,
+                                          lasso=lasso,
+                                          ridge=ridge)
 
     if not os.path.exists("result_" + event_type):
         os.makedirs("result_" + event_type)
@@ -404,6 +402,177 @@ def multi_layer_perceptron_experiments(event_type):
         os.makedirs("result_" + event_type)
     filename = "result_" + event_type + "/MLP " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
     return model_experiments(model, data_set, filename)
+
+
+class LogisticRegressionExperiment(object):
+    def __init__(self, event_type):
+        self._event_type = event_type
+        self._data_set = read_data(event_type)
+        self._num_features = self._data_set.dynamic_feature.shape[2]
+        self._time_steps = self._data_set.dynamic_feature.shape[1]
+        self._n_output = self._data_set.labels.shape[1]
+        print(event_type)
+        self._model_format()
+        self._check_path()
+
+    def _model_format(self):
+        if self._event_type == "qx":
+            learning_rate, max_loss, max_pace, lasso, ridge = mlp_qx_setup.all
+        elif self._event_type == "cx":
+            learning_rate, max_loss, max_pace, lasso, ridge = mlp_cx_setup.all
+        else:
+            learning_rate, max_loss, max_pace, lasso, ridge = mlp_xycj_setup.all
+        self._model = LogisticRegression(num_features=self._num_features,
+                                         time_steps=self._time_steps,
+                                         n_output=self._n_output,
+                                         batch_size=ExperimentSetup.batch_size,
+                                         epochs=ExperimentSetup.epochs,
+                                         output_n_epoch=ExperimentSetup.output_n_epochs,
+                                         learning_rate=learning_rate,
+                                         max_loss=max_loss,
+                                         max_pace=max_pace,
+                                         lasso=lasso,
+                                         ridge=ridge)
+
+    def _check_path(self):
+        if not os.path.exists("result_" + self._event_type):
+            os.makedirs("result_" + self._event_type)
+        self._filename = "result_" + self._event_type + "/" + self._model.name + " " + time.strftime(
+            "%Y-%m-%d-%H-%M-%S", time.localtime())
+
+    def do_experiments(self):
+        dynamic_feature = self._data_set.dynamic_feature
+        labels = self._data_set.labels
+        kf = sklearn.model_selection.StratifiedKFold(n_splits=ExperimentSetup.kfold, shuffle=True)
+
+        n_output = labels.shape[1]  # classes
+
+        tol_test_index = np.zeros(shape=0, dtype=np.int32)
+        tol_pred = np.zeros(shape=(0, n_output))
+        tol_label = np.zeros(shape=(0, n_output), dtype=np.int32)
+        i = 1
+        for train_idx, test_idx in kf.split(X=dynamic_feature, y=labels.reshape(-1)):  # 五折交叉
+            train_dynamic = dynamic_feature[train_idx]
+            train_y = labels[train_idx]
+            train_dynamic_res, train_y_res = imbalance_preprocess(train_dynamic, train_y)  # SMOTE过采样方法处理不平衡数据集
+
+            test_dynamic = dynamic_feature[test_idx]
+            test_y = labels[test_idx]
+
+            train_set = DataSet(train_dynamic_res, train_y_res)
+            test_set = DataSet(test_dynamic, test_y)
+
+            self._model.fit(train_set, test_set)
+
+            y_score = self._model.predict(test_set)
+
+            tol_test_index = np.concatenate((tol_test_index, test_idx))
+            tol_pred = np.vstack((tol_pred, y_score))
+            tol_label = np.vstack((tol_label, test_y))
+            print("Cross validation: {} of {}".format(i, ExperimentSetup.kfold),
+                  time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+            i += 1
+            evaluate(tol_test_index, tol_label, tol_pred, self._filename)
+
+
+class MultiLayerPercptronExperimrnt(LogisticRegressionExperiment):
+    def __init__(self, event_type):
+        super().__init__(event_type)
+
+    def _model_format(self):
+        if self._event_type == "qx":
+            learning_rate, max_loss, max_pace, lasso, ridge = mlp_qx_setup.all
+        elif self._event_type == "cx":
+            learning_rate, max_loss, max_pace, lasso, ridge = mlp_cx_setup.all
+        else:
+            learning_rate, max_loss, max_pace, lasso, ridge = mlp_xycj_setup.all
+        self._model = MultiLayerPerceptron(num_features=self._num_features,
+                                           time_steps=self._time_steps,
+                                           hidden_units=ExperimentSetup.hidden_size,
+                                           n_output=self._n_output,
+                                           batch_size=ExperimentSetup.batch_size,
+                                           epochs=ExperimentSetup.epochs,
+                                           output_n_epoch=ExperimentSetup.output_n_epochs,
+                                           learning_rate=learning_rate,
+                                           max_loss=max_loss,
+                                           max_pace=max_pace,
+                                           lasso=lasso,
+                                           ridge=ridge)
+
+
+class BidirectionalLSTMExperiments(LogisticRegressionExperiment):
+    def __init__(self, event_type):
+        super().__init__(event_type)
+
+    def _model_format(self):
+        if self._event_type == "qx":
+            learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_qx_setup.all
+        elif self._event_type == "cx":
+            learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_cx_setup.all
+        else:
+            learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_xycj_setup.all
+        self._model = BidirectionalLSTMModel(num_features=self._num_features,
+                                             time_steps=self._time_steps,
+                                             lstm_size=ExperimentSetup.hidden_size,
+                                             n_output=self._n_output,
+                                             batch_size=ExperimentSetup.batch_size,
+                                             epochs=ExperimentSetup.epochs,
+                                             output_n_epoch=ExperimentSetup.output_n_epochs,
+                                             learning_rate=learning_rate,
+                                             max_loss=max_loss,
+                                             max_pace=max_pace,
+                                             lasso=lasso,
+                                             ridge=ridge)
+
+
+class ContextAttentionRNNExperiments(LogisticRegressionExperiment):
+    def __init__(self, event_type):
+        super().__init__(event_type)
+
+    def _model_format(self):
+        if self._event_type == "qx":
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_qx_setup.all
+        elif self._event_type == "cx":
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_cx_setup.all
+        else:
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
+        self._model = ContextAttentionRNN(num_features=self._num_features,
+                                          time_steps=self._time_steps,
+                                          lstm_size=ExperimentSetup.hidden_size,
+                                          n_output=self._n_output,
+                                          batch_size=ExperimentSetup.batch_size,
+                                          epochs=ExperimentSetup.epochs,
+                                          output_n_epoch=ExperimentSetup.output_n_epochs,
+                                          learning_rate=learning_rate,
+                                          max_loss=max_loss,
+                                          max_pace=max_pace,
+                                          lasso=lasso,
+                                          ridge=ridge)
+
+
+class ContextAttentionRNNWithOriginExperiments(LogisticRegressionExperiment):
+    def __init__(self, event_type):
+        super().__init__(event_type)
+
+    def _model_format(self):
+        if self._event_type == "qx":
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_qx_setup.all
+        elif self._event_type == "cx":
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_cx_setup.all
+        else:
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
+        self._model = ContextAttentionRNN(num_features=self._num_features,
+                                          time_steps=self._time_steps,
+                                          lstm_size=ExperimentSetup.hidden_size,
+                                          n_output=self._n_output,
+                                          batch_size=ExperimentSetup.batch_size,
+                                          epochs=ExperimentSetup.epochs,
+                                          output_n_epoch=ExperimentSetup.output_n_epochs,
+                                          learning_rate=learning_rate,
+                                          max_loss=max_loss,
+                                          max_pace=max_pace,
+                                          lasso=lasso,
+                                          ridge=ridge)
 
 
 if __name__ == '__main__':

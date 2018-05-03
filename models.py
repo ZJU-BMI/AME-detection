@@ -296,24 +296,24 @@ class ContextAttentionRNNWithOrigin(ContextAttentionRNN):
         super().__init__(num_features, time_steps, lstm_size, n_output, batch_size, epochs, output_n_epoch,
                          learning_rate, max_loss, max_pace, lasso, ridge, optimizer, name)
 
-        def _hidden_layer(self):
-            self._lstm = {}
-            self._init_state = {}
-            for direction in ['forward', 'backward']:
-                self._lstm[direction] = tf.contrib.rnn.BasicLSTMCell(self._lstm_size)
-                self._init_state[direction] = self._lstm[direction].zero_state(tf.shape(self._x)[0], tf.float32)
+    def _hidden_layer(self):
+        self._lstm = {}
+        self._init_state = {}
+        for direction in ['forward', 'backward']:
+            self._lstm[direction] = tf.contrib.rnn.BasicLSTMCell(self._lstm_size)
+            self._init_state[direction] = self._lstm[direction].zero_state(tf.shape(self._x)[0], tf.float32)
 
-            mask, length = self._length()
-            self._hidden, _ = tf.nn.bidirectional_dynamic_rnn(self._lstm['forward'],
-                                                              self._lstm['backward'],
-                                                              tf.concat([self._context, self._x], 3),
-                                                              sequence_length=length,
-                                                              initial_state_fw=self._init_state['forward'],
-                                                              initial_state_bw=self._init_state['backward'])
-            self._hidden_concat = tf.concat(self._hidden,
-                                            axis=2)  # n_samples×time_steps×2lstm_size→n_samples×2lstm_size
-            self._hidden_rep = tf.reduce_sum(self._hidden_concat, 1) / tf.tile(tf.reduce_sum(mask, 1, keep_dims=True),
-                                                                               (1, self._lstm_size * 2))
+        mask, length = self._length()
+        self._hidden, _ = tf.nn.bidirectional_dynamic_rnn(self._lstm['forward'],
+                                                          self._lstm['backward'],
+                                                          tf.concat([self._context, self._x], 2),
+                                                          sequence_length=length,
+                                                          initial_state_fw=self._init_state['forward'],
+                                                          initial_state_bw=self._init_state['backward'])
+        self._hidden_concat = tf.concat(self._hidden,
+                                        axis=2)  # n_samples×time_steps×2lstm_size→n_samples×2lstm_size
+        self._hidden_rep = tf.reduce_sum(self._hidden_concat, 1) / tf.tile(tf.reduce_sum(mask, 1, keep_dims=True),
+                                                                           (1, self._lstm_size * 2))
 
 
 class LogisticRegression(object):
