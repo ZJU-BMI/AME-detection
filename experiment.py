@@ -19,7 +19,7 @@ class ExperimentSetup(object):
     kfold = 5
     batch_size = 64
     hidden_size = 128
-    epochs = 200
+    epochs = 5
     output_n_epochs = 1
 
     def __init__(self, learning_rate=0.01, max_loss=2.0, max_pace=0.01, lasso=0.0, ridge=0.0):
@@ -106,7 +106,8 @@ def evaluate(test_index, y_label, y_score, file_name):
     # collect samples of FP, TP ,FN ,TN and write the result of prediction
     fp_sentences = fn_sentences = tp_sentences = tn_sentences = []
     fp_count = tp_count = fn_count = tn_count = 1
-    sentence_set = load(open("resources/all_sentences_progress_note.pkl", "rb"))
+    sentence_set = load(open("resources/all_sentence_progress_note.pkl", "rb"))
+    # sentence_set = load(open("resources/all_sentences_admission_records.pkl", "rb"))
     for j in range(len(y_label)):
         if y_label[j] == 0 and y_pred_label[j] == 1:  # FP
             write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, fp_sentences,
@@ -232,7 +233,7 @@ def model_experiments(model, data_set, filename):
         test_dynamic = dynamic_feature[test_idx]
         test_y = labels[test_idx]
 
-        train_set = DataSet(train_dynamic_res, train_y_res)
+        train_set = DataSet(train_dynamic_res.astype(np.float32), train_y_res)
         test_set = DataSet(test_dynamic, test_y)
 
         model.fit(train_set, test_set)
@@ -260,148 +261,6 @@ def imbalance_preprocess(train_dynamic, train_y):  # SMOTE过采样
     train_dynamic_res = x_res.reshape([-1, train_dynamic.shape[1], 100])
     train_y_res = y_res.reshape([-1, 1])
     return train_dynamic_res, train_y_res
-
-
-def bidirectional_lstm_model_experiments(event_type):
-    data_set = read_data(event_type)
-    dynamic_feature = data_set.dynamic_feature
-    labels = data_set.labels
-
-    num_features = dynamic_feature.shape[2]
-    time_steps = dynamic_feature.shape[1]
-    n_output = labels.shape[1]
-
-    print(event_type)
-    if event_type == "qx":
-        learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_qx_setup.all
-    elif event_type == "cx":
-        learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_cx_setup.all
-    else:
-        learning_rate, max_loss, max_pace, lasso, ridge = bi_lstm_xycj_setup.all
-
-    model = BidirectionalLSTMModel(num_features=num_features,
-                                   time_steps=time_steps,
-                                   lstm_size=ExperimentSetup.hidden_size,
-                                   n_output=n_output,
-                                   batch_size=ExperimentSetup.batch_size,
-                                   epochs=ExperimentSetup.epochs,
-                                   output_n_epoch=ExperimentSetup.output_n_epochs,
-                                   learning_rate=learning_rate,
-                                   max_loss=max_loss,
-                                   max_pace=max_pace,
-                                   lasso=lasso,
-                                   ridge=ridge)
-    if not os.path.exists("result_" + event_type):
-        os.makedirs("result_" + event_type)
-    filename = "result_" + event_type + "/Bi-LSTM " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-    return model_experiments(model, data_set, filename)
-
-
-def context_attention_rnn_experiments(event_type):
-    data_set = read_data(event_type)
-    dynamic_feature = data_set.dynamic_feature
-    labels = data_set.labels
-
-    num_features = dynamic_feature.shape[2]
-    time_steps = dynamic_feature.shape[1]
-    n_output = labels.shape[1]
-
-    print(event_type)
-    if event_type == "qx":
-        learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_qx_setup.all
-    elif event_type == "cx":
-        learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_cx_setup.all
-    else:
-        learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
-
-    model = ContextAttentionRNN(num_features=num_features,
-                                time_steps=time_steps,
-                                lstm_size=ExperimentSetup.hidden_size,
-                                n_output=n_output,
-                                batch_size=ExperimentSetup.batch_size,
-                                epochs=ExperimentSetup.epochs,
-                                output_n_epoch=ExperimentSetup.output_n_epochs,
-                                learning_rate=learning_rate,
-                                max_loss=max_loss,
-                                max_pace=max_pace,
-                                lasso=lasso,
-                                ridge=ridge)
-
-    if not os.path.exists("result_" + event_type):
-        os.makedirs("result_" + event_type)
-    filename = "result_" + event_type + "/CA-RNN " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-    return model_experiments(model, data_set, filename)
-
-
-def logistic_regression_experiments(event_type):
-    data_set = read_data(event_type)
-    dynamic_feature = data_set.dynamic_feature
-    labels = data_set.labels
-
-    num_features = dynamic_feature.shape[2]
-    time_steps = dynamic_feature.shape[1]
-    n_output = labels.shape[1]
-
-    print(event_type)
-    if event_type == "qx":
-        learning_rate, max_loss, max_pace, lasso, ridge = lr_qx_setup.all
-    elif event_type == "cx":
-        learning_rate, max_loss, max_pace, lasso, ridge = lr_cx_setup.all
-    else:
-        learning_rate, max_loss, max_pace, lasso, ridge = lr_xycj_setup.all
-
-    model = LogisticRegression(num_features=num_features,
-                               time_steps=time_steps,
-                               n_output=n_output,
-                               batch_size=ExperimentSetup.batch_size,
-                               epochs=ExperimentSetup.epochs,
-                               output_n_epoch=ExperimentSetup.output_n_epochs,
-                               learning_rate=learning_rate,
-                               max_loss=max_loss,
-                               max_pace=max_pace,
-                               lasso=lasso,
-                               ridge=ridge)
-
-    if not os.path.exists("result_" + event_type):
-        os.makedirs("result_" + event_type)
-    filename = "result_" + event_type + "/LR " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-    return model_experiments(model, data_set, filename)
-
-
-def multi_layer_perceptron_experiments(event_type):
-    data_set = read_data(event_type)
-    dynamic_feature = data_set.dynamic_feature
-    labels = data_set.labels
-
-    num_features = dynamic_feature.shape[2]
-    time_steps = dynamic_feature.shape[1]
-    n_output = labels.shape[1]
-
-    print(event_type)
-    if event_type == "qx":
-        learning_rate, max_loss, max_pace, lasso, ridge = mlp_qx_setup.all
-    elif event_type == "cx":
-        learning_rate, max_loss, max_pace, lasso, ridge = mlp_cx_setup.all
-    else:
-        learning_rate, max_loss, max_pace, lasso, ridge = mlp_xycj_setup.all
-
-    model = MultiLayerPerceptron(num_features,
-                                 time_steps,
-                                 hidden_units=ExperimentSetup.hidden_size,
-                                 n_output=n_output,
-                                 batch_size=ExperimentSetup.batch_size,
-                                 epochs=ExperimentSetup.epochs,
-                                 output_n_epoch=ExperimentSetup.output_n_epochs,
-                                 learning_rate=learning_rate,
-                                 max_loss=max_loss,
-                                 max_pace=max_pace,
-                                 lasso=lasso,
-                                 ridge=ridge)
-
-    if not os.path.exists("result_" + event_type):
-        os.makedirs("result_" + event_type)
-    filename = "result_" + event_type + "/MLP " + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-    return model_experiments(model, data_set, filename)
 
 
 class LogisticRegressionExperiment(object):
@@ -472,7 +331,7 @@ class LogisticRegressionExperiment(object):
             print("Cross validation: {} of {}".format(i, ExperimentSetup.kfold),
                   time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
             i += 1
-            evaluate(tol_test_index, tol_label, tol_pred, self._filename)
+        evaluate(tol_test_index, tol_label, tol_pred, self._filename)
 
 
 class MultiLayerPercptronExperimrnt(LogisticRegressionExperiment):
@@ -581,7 +440,6 @@ if __name__ == '__main__':
     bleeding = "cx"
     revascularization = "xycj"
 
-    # context_attention_rnn_experiments(ischemia)
-    bidirectional_lstm_model_experiments(ischemia)
-    logistic_regression_experiments(ischemia)
-    multi_layer_perceptron_experiments(ischemia)
+    ContextAttentionRNNWithOriginExperiments(ischemia).do_experiments()
+    ContextAttentionRNNExperiments(ischemia).do_experiments()
+    BidirectionalLSTMExperiments(ischemia).do_experiments()

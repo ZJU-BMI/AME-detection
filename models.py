@@ -265,8 +265,9 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
             if data_set.epoch_completed % self._output_n_epoch == 0 and data_set.epoch_completed not in logged:
                 logged.add(data_set.epoch_completed)
                 loss_prev = loss
-                loss = self._sess.run(self._loss, feed_dict={self._x: data_set.dynamic_feature,
-                                                             self._y: data_set.labels,
+                # 由于内存不足，在case2时只能计算一个mini-batch的loss
+                loss = self._sess.run(self._loss, feed_dict={self._x: dynamic_feature,
+                                                             self._y: labels,
                                                              self._v: self._template})
                 loss_diff = loss_prev - loss
 
