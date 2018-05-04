@@ -17,9 +17,9 @@ from models import BidirectionalLSTMModel, ContextAttentionRNN, LogisticRegressi
 class ExperimentSetup(object):
     # TODO 改
     kfold = 5
-    batch_size = 64
+    batch_size = 128
     hidden_size = 128
-    epochs = 5
+    epochs = 1
     output_n_epochs = 1
 
     def __init__(self, learning_rate=0.01, max_loss=2.0, max_pace=0.01, lasso=0.0, ridge=0.0):
@@ -104,9 +104,15 @@ def evaluate(test_index, y_label, y_score, file_name):
     table.write(1, table_title.index("f1-score"), float(f1))
 
     # collect samples of FP, TP ,FN ,TN and write the result of prediction
-    fp_sentences = fn_sentences = tp_sentences = tn_sentences = []
-    fp_count = tp_count = fn_count = tn_count = 1
-    sentence_set = load(open("resources/all_sentence_progress_note.pkl", "rb"))
+    fp_sentences = []
+    fn_sentences = []
+    tp_sentences = []
+    tn_sentences = []
+    fp_count = 1
+    tp_count = 1
+    fn_count = 1
+    tn_count = 1
+    sentence_set = load(open("resources/all_sentences_progress_notes.pkl", "rb"))
     # sentence_set = load(open("resources/all_sentences_admission_records.pkl", "rb"))
     for j in range(len(y_label)):
         if y_label[j] == 0 and y_pred_label[j] == 1:  # FP
@@ -332,6 +338,7 @@ class LogisticRegressionExperiment(object):
                   time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
             i += 1
         evaluate(tol_test_index, tol_label, tol_pred, self._filename)
+        self._model.close()
 
 
 class MultiLayerPercptronExperimrnt(LogisticRegressionExperiment):
@@ -440,6 +447,16 @@ if __name__ == '__main__':
     bleeding = "cx"
     revascularization = "xycj"
 
+    # MultiLayerPercptronExperimrnt(ischemia).do_experiments()
+    # MultiLayerPercptronExperimrnt(bleeding).do_experiments()
     ContextAttentionRNNWithOriginExperiments(ischemia).do_experiments()
     ContextAttentionRNNExperiments(ischemia).do_experiments()
     BidirectionalLSTMExperiments(ischemia).do_experiments()
+
+    ContextAttentionRNNWithOriginExperiments(bleeding).do_experiments()
+    ContextAttentionRNNExperiments(bleeding).do_experiments()
+    BidirectionalLSTMExperiments(bleeding).do_experiments()
+
+    ContextAttentionRNNWithOriginExperiments(revascularization).do_experiments()
+    ContextAttentionRNNExperiments(revascularization).do_experiments()
+    BidirectionalLSTMExperiments(revascularization).do_experiments()

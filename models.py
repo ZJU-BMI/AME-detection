@@ -122,6 +122,10 @@ class BasicLSTMModel(object):
     def name(self):
         return self._name
 
+    def close(self):
+        self._sess.close()
+        tf.reset_default_graph()
+
 
 class BidirectionalLSTMModel(BasicLSTMModel):
     def __init__(self, num_features, time_steps, lstm_size, n_output, batch_size=64, epochs=1000, output_n_epoch=10,
@@ -409,6 +413,10 @@ class LogisticRegression(object):
     @property
     def name(self):
         return self._name
+
+    def close(self):
+        self._sess.close()
+        tf.reset_default_graph()
 
 
 class MultiLayerPerceptron(LogisticRegression):
