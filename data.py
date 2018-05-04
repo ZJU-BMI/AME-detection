@@ -65,13 +65,13 @@ class DataSet(object):
 
 def read_data(event_type):
     # TODO 字符串改为constant
-    dynamic_features = pickle.load(open("input_file_np_1000f_xjqx+_80w.pkl", "rb"))
+    dynamic_features = pickle.load(open("resources/input_file_progress_note.pkl", "rb"))
     if event_type == "qx":
-        labels = pickle.load(open("output_file_np_1000f_xjqx+_80w.pkl", "rb"))[:, -1].reshape([-1, 1])
+        labels = pickle.load(open("resources/output_file_progress_note_qx.pkl", "rb"))[:, -1].reshape([-1, 1])
     elif event_type == "xycj":
-        labels = pickle.load(open("output_file_np_1000f_xycj+_80w.pkl", "rb"))[:, -1].reshape([-1, 1])
+        labels = pickle.load(open("resources/output_file_progress_note_xycj.pkl", "rb"))[:, -1].reshape([-1, 1])
     else:
-        labels = pickle.load(open("output_file_np_1000f_cx+_80w.pkl", "rb"))[:, -1].reshape([-1, 1])
+        labels = pickle.load(open("resources/output_file_progress_note_cx.pkl", "rb"))[:, -1].reshape([-1, 1])
     return DataSet(dynamic_features, labels)
 
 

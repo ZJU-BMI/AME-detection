@@ -165,7 +165,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         self._max_pace = max_pace
         self._lasso = lasso
         self._ridge = ridge
-        self._template()
+        self._template_format()
 
         print("learning_rate=", learning_rate, "max_loss=", max_loss, "max_pace=", max_pace, "lasso=", lasso, "ridge=",
               ridge)
@@ -177,7 +177,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
 
             self._sess = tf.Session()  # 会话
 
-            self._W_trans = tf.Variable(tf.truncated_normal([1, 100], stddev=0.1))
+            self._W_trans = tf.Variable(tf.truncated_normal([1, self._num_features], stddev=0.1))
 
             self._attention_mechanism()
 
@@ -219,7 +219,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
 
     # TODO 后续再做调整：1.time_step在原有基础上+10（attention机制后前后各多出5个）
 
-    def _template(self):
+    def _template_format(self):
         template_i = np.array([0, 1, 2, 3, 4, 6, 7, 8, 9, 10], dtype=np.int32).reshape([1, -1])
         add_one = np.ones([10], dtype=np.int32).reshape([1, -1])
         self._template = np.zeros([0, 10], dtype=np.int32)

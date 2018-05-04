@@ -106,7 +106,7 @@ def evaluate(test_index, y_label, y_score, file_name):
     # collect samples of FP, TP ,FN ,TN and write the result of prediction
     fp_sentences = fn_sentences = tp_sentences = tn_sentences = []
     fp_count = tp_count = fn_count = tn_count = 1
-    sentence_set = load(open("all_sentences.pkl", "rb"))
+    sentence_set = load(open("resources/all_sentences_progress_note.pkl", "rb"))
     for j in range(len(y_label)):
         if y_label[j] == 0 and y_pred_label[j] == 1:  # FP
             write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, fp_sentences,
@@ -314,18 +314,18 @@ def context_attention_rnn_experiments(event_type):
     else:
         learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
 
-    model = ContextAttentionRNNWithOrigin(num_features=num_features,
-                                          time_steps=time_steps,
-                                          lstm_size=ExperimentSetup.hidden_size,
-                                          n_output=n_output,
-                                          batch_size=ExperimentSetup.batch_size,
-                                          epochs=ExperimentSetup.epochs,
-                                          output_n_epoch=ExperimentSetup.output_n_epochs,
-                                          learning_rate=learning_rate,
-                                          max_loss=max_loss,
-                                          max_pace=max_pace,
-                                          lasso=lasso,
-                                          ridge=ridge)
+    model = ContextAttentionRNN(num_features=num_features,
+                                time_steps=time_steps,
+                                lstm_size=ExperimentSetup.hidden_size,
+                                n_output=n_output,
+                                batch_size=ExperimentSetup.batch_size,
+                                epochs=ExperimentSetup.epochs,
+                                output_n_epoch=ExperimentSetup.output_n_epochs,
+                                learning_rate=learning_rate,
+                                max_loss=max_loss,
+                                max_pace=max_pace,
+                                lasso=lasso,
+                                ridge=ridge)
 
     if not os.path.exists("result_" + event_type):
         os.makedirs("result_" + event_type)
@@ -561,23 +561,27 @@ class ContextAttentionRNNWithOriginExperiments(LogisticRegressionExperiment):
             learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_cx_setup.all
         else:
             learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
-        self._model = ContextAttentionRNN(num_features=self._num_features,
-                                          time_steps=self._time_steps,
-                                          lstm_size=ExperimentSetup.hidden_size,
-                                          n_output=self._n_output,
-                                          batch_size=ExperimentSetup.batch_size,
-                                          epochs=ExperimentSetup.epochs,
-                                          output_n_epoch=ExperimentSetup.output_n_epochs,
-                                          learning_rate=learning_rate,
-                                          max_loss=max_loss,
-                                          max_pace=max_pace,
-                                          lasso=lasso,
-                                          ridge=ridge)
+        self._model = ContextAttentionRNNWithOrigin(num_features=self._num_features,
+                                                    time_steps=self._time_steps,
+                                                    lstm_size=ExperimentSetup.hidden_size,
+                                                    n_output=self._n_output,
+                                                    batch_size=ExperimentSetup.batch_size,
+                                                    epochs=ExperimentSetup.epochs,
+                                                    output_n_epoch=ExperimentSetup.output_n_epochs,
+                                                    learning_rate=learning_rate,
+                                                    max_loss=max_loss,
+                                                    max_pace=max_pace,
+                                                    lasso=lasso,
+                                                    ridge=ridge)
 
 
 if __name__ == '__main__':
     # TODO此处字符串改为constant
-    context_attention_rnn_experiments('qx')
-    bidirectional_lstm_model_experiments('cx')
-    # logistic_regression_experiments("qx")
-    multi_layer_perceptron_experiments("qx")
+    ischemia = "qx"
+    bleeding = "cx"
+    revascularization = "xycj"
+
+    # context_attention_rnn_experiments(ischemia)
+    bidirectional_lstm_model_experiments(ischemia)
+    logistic_regression_experiments(ischemia)
+    multi_layer_perceptron_experiments(ischemia)
