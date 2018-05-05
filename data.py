@@ -16,9 +16,11 @@ class DataSet(object):
             # raise ValueError('The size of one batch: {} should be less than the total number of '
             #                  'data: {}'.format(batch_size, self.num_examples))
             batch_size = self._labels.shape[0]
+        if self._batch_completed == 0:
+            self._shuffle()
         self._batch_completed += 1
         start = self._index_in_epoch
-        if start + batch_size > self.num_examples:
+        if start + batch_size >= self.num_examples:
             self._epoch_completed += 1
             # TODO 没必要拼接，直接输入剩余部分即可（或者舍弃亦可）
             dynamic_rest_part = self._dynamic_feature[start:self._num_examples]

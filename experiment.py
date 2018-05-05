@@ -19,7 +19,7 @@ class ExperimentSetup(object):
     kfold = 5
     batch_size = 128
     hidden_size = 128
-    epochs = 1
+    epochs = 5
     output_n_epochs = 1
 
     def __init__(self, learning_rate=0.01, max_loss=2.0, max_pace=0.01, lasso=0.0, ridge=0.0):
