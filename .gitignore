@@ -16,4 +16,8 @@ result_*/
 
 *.xls
 
+*.xlsx
+
 resource/
+
+model/

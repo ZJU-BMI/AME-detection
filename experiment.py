@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import time
 import sklearn
 import xlwt
+import xlsxwriter
 from imblearn.over_sampling import SMOTE
 import numpy as np
 
@@ -54,20 +55,20 @@ class ExperimentSetup(object):
         return self._learning_rate, self._max_loss, self._max_pace, self._lasso, self._ridge
 
 
-lr_qx_setup = ExperimentSetup(0.01, 2, 0.01, 0.01, 0.01)
-mlp_qx_setup = ExperimentSetup(0.01, 2, 0.001, 0.0001, 0.001)
-bi_lstm_qx_setup = ExperimentSetup(0.01, 0.5, 0.01)
-ca_rnn_qx_setup = ExperimentSetup(0.01, 0.08, 0.008)
+lr_qx_setup = ExperimentSetup(0.0001, 2, 0.0001, 0, 0.001)
+mlp_qx_setup = ExperimentSetup(0.0001, 2, 0.0001, 0, 0.001)
+bi_lstm_qx_setup = ExperimentSetup(0.01, 0.5, 0.01, 0, 0.001)
+ca_rnn_qx_setup = ExperimentSetup(0.01, 0.08, 0.008, 0, 0.001)
 
-lr_xycj_setup = ExperimentSetup(0.01, 2, 0.004, 0.01, 0.001)
-mlp_xycj_setup = ExperimentSetup(0.01, 2, 0.005, 0.0001, 0.001)
-bi_lstm_xycj_setup = ExperimentSetup(0.001, 0.5, 0.001)
-ca_rnn_xycj_setup = ExperimentSetup(0.001, 0.1, 0.0025)
+lr_xycj_setup = ExperimentSetup(0.0001, 2, 0.0001, 0, 0.001)
+mlp_xycj_setup = ExperimentSetup(0.0001, 2, 0.0001, 0, 0.001)
+bi_lstm_xycj_setup = ExperimentSetup(0.01, 0.5, 0.001, 0, 0.001)
+ca_rnn_xycj_setup = ExperimentSetup(0.01, 0.1, 0.0025, 0, 0.001)  # 继续调整
 
-lr_cx_setup = ExperimentSetup(0.01, 2, 0.001, 0.001, 0.01)
-mlp_cx_setup = ExperimentSetup(0.01, 2, 0.1, 0.0001, 0.001)
-bi_lstm_cx_setup = ExperimentSetup(0.01, 0.4, 0.04)
-ca_rnn_cx_setup = ExperimentSetup(0.01, 0.1, 0.0025)
+lr_cx_setup = ExperimentSetup(0.0001, 2, 0, 0, 0.001)
+mlp_cx_setup = ExperimentSetup(0.0001, 2, 0, 0, 0.001)
+bi_lstm_cx_setup = ExperimentSetup(0.01, 0.4, 0.04, 0, 0.001)  # 暂时不必改动
+ca_rnn_cx_setup = ExperimentSetup(0.01, 0.1, 0.0025, 0, 0.001)
 
 
 def evaluate(test_index, y_label, y_score, file_name):
@@ -217,6 +218,7 @@ def plot_roc(test_labels, test_predictions, table, table_title, filename):
         plt.legend(loc='lower right')
         plt.title(title)
         plt.savefig(filename + '.png', format='png')
+        plt.close()
     return threshold
 
 
@@ -282,11 +284,11 @@ class LogisticRegressionExperiment(object):
 
     def _model_format(self):
         if self._event_type == "qx":
-            learning_rate, max_loss, max_pace, lasso, ridge = mlp_qx_setup.all
+            learning_rate, max_loss, max_pace, lasso, ridge = lr_qx_setup.all
         elif self._event_type == "cx":
-            learning_rate, max_loss, max_pace, lasso, ridge = mlp_cx_setup.all
+            learning_rate, max_loss, max_pace, lasso, ridge = lr_cx_setup.all
         else:
-            learning_rate, max_loss, max_pace, lasso, ridge = mlp_xycj_setup.all
+            learning_rate, max_loss, max_pace, lasso, ridge = lr_xycj_setup.all
         self._model = LogisticRegression(num_features=self._num_features,
                                          time_steps=self._time_steps,
                                          n_output=self._n_output,
@@ -308,7 +310,7 @@ class LogisticRegressionExperiment(object):
     def do_experiments(self):
         dynamic_feature = self._data_set.dynamic_feature
         labels = self._data_set.labels
-        kf = sklearn.model_selection.StratifiedKFold(n_splits=ExperimentSetup.kfold, shuffle=True)
+        kf = sklearn.model_selection.StratifiedKFold(n_splits=ExperimentSetup.kfold, shuffle=False)
 
         n_output = labels.shape[1]  # classes
 
@@ -327,7 +329,7 @@ class LogisticRegressionExperiment(object):
             train_set = DataSet(train_dynamic_res, train_y_res)
             test_set = DataSet(test_dynamic, test_y)
 
-            self._model.fit(train_set, test_set)
+            self._model.fit(train_set, test_set, self._event_type)
 
             y_score = self._model.predict(test_set)
 
@@ -440,6 +442,47 @@ class ContextAttentionRNNWithOriginExperiments(LogisticRegressionExperiment):
                                                     lasso=lasso,
                                                     ridge=ridge)
 
+    def attention_analysis(self):
+        dynamic_feature = self._data_set.dynamic_feature
+        labels = self._data_set.labels
+        kf = sklearn.model_selection.StratifiedKFold(n_splits=ExperimentSetup.kfold, shuffle=False)
+
+        i_fold = 1
+        for train_idx, test_idx in kf.split(X=dynamic_feature, y=labels.reshape(-1)):  # 五折交叉
+            if i_fold == 4:
+                test_dynamic = dynamic_feature[test_idx]
+                test_labels = labels[test_idx]
+                prob, attention_signals = self._model.attention_analysis(test_dynamic)
+                fpr, tpr, thresholds = roc_curve(test_labels, prob, pos_label=1)
+                threshold = thresholds[np.argmax(tpr - fpr)]
+                pre = (prob >= threshold) * 1
+                attention_write(attention_signals, test_idx, dynamic_feature.shape[1], test_labels, pre)
+            i_fold += 1
+        # break
+        self._model.close()
+        # TODO model中加attention_analysis函数，输入为test_data，读取模型并返回attention权重
+        # TODO 实验部分写一个专门计算每个词注意力权重平均值的函数，并能写入excel
+
+
+def attention_write(attention_signals, test_index, n_steps, labels, pre):
+    attention_signals_shift = np.zeros([len(test_index), n_steps, n_steps + 10])
+    for i_sample in range(len(test_index)):
+        for j in range(n_steps):
+            attention_signals_shift[i_sample, j, j:j + 5] = attention_signals[i_sample, j, 0:5]
+            attention_signals_shift[i_sample, j, j + 6:j + 11] = attention_signals[i_sample, j, 5:10]
+    attention_signals_avg = np.sum(attention_signals_shift, 1)[:, 5:n_steps + 5] / 10
+    sentence_set = load(open("resources/all_sentences_progress_notes.pkl", "rb"))
+    workbook = xlsxwriter.Workbook("cx_1.4_attention.xlsx")
+    table = workbook.add_worksheet()
+    i_row = 0
+    for sample in range(len(test_index)):
+        if labels[sample] == 1 and pre[sample] == 1:
+            for step, word in enumerate(sentence_set[test_index[sample]]):
+                table.write(3 * i_row, step, word)
+                table.write(3 * i_row + 1, step, attention_signals_avg[sample, step])
+            i_row += 1
+    workbook.close()
+
 
 if __name__ == '__main__':
     # TODO此处字符串改为constant
@@ -447,16 +490,26 @@ if __name__ == '__main__':
     bleeding = "cx"
     revascularization = "xycj"
 
-    # MultiLayerPercptronExperimrnt(ischemia).do_experiments()
-    # MultiLayerPercptronExperimrnt(bleeding).do_experiments()
-    ContextAttentionRNNWithOriginExperiments(ischemia).do_experiments()
-    ContextAttentionRNNExperiments(ischemia).do_experiments()
-    BidirectionalLSTMExperiments(ischemia).do_experiments()
+    for i in range(1):
+        # LogisticRegressionExperiment(ischemia).do_experiments()
+        # MultiLayerPercptronExperimrnt(ischemia).do_experiments()
 
-    ContextAttentionRNNWithOriginExperiments(bleeding).do_experiments()
-    ContextAttentionRNNExperiments(bleeding).do_experiments()
-    BidirectionalLSTMExperiments(bleeding).do_experiments()
+        # LogisticRegressionExperiment(bleeding).do_experiments()
+        # MultiLayerPercptronExperimrnt(bleeding).do_experiments()
 
-    ContextAttentionRNNWithOriginExperiments(revascularization).do_experiments()
-    ContextAttentionRNNExperiments(revascularization).do_experiments()
-    BidirectionalLSTMExperiments(revascularization).do_experiments()
+        # LogisticRegressionExperiment(revascularization).do_experiments()
+        # MultiLayerPercptronExperimrnt(revascularization).do_experiments()
+
+        # ContextAttentionRNNWithOriginExperiments(ischemia).do_experiments()
+        # ContextAttentionRNNExperiments(ischemia).do_experiments()
+        # BidirectionalLSTMExperiments(ischemia).do_experiments()
+        #
+        ContextAttentionRNNWithOriginExperiments(bleeding).do_experiments()
+        # ContextAttentionRNNExperiments(bleeding).do_experiments()
+        BidirectionalLSTMExperiments(bleeding).do_experiments()
+
+        # ContextAttentionRNNWithOriginExperiments(revascularization).do_experiments()
+        # ContextAttentionRNNExperiments(revascularization).do_experiments()
+        # BidirectionalLSTMExperiments(revascularization).do_experiments()
+
+        # ContextAttentionRNNWithOriginExperiments(bleeding).attention_analysis()

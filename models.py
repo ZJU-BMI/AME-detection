@@ -77,7 +77,7 @@ class BasicLSTMModel(object):
         length = tf.cast(length, tf.int32)  # 类型转换
         return mask, length
 
-    def fit(self, data_set, test_set):
+    def fit(self, data_set, test_set, event_type):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
@@ -202,6 +202,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                     self._loss += tf.contrib.layers.l2_regularizer(ridge)(trainable_variables)
 
             self._train_op = optimizer(learning_rate).minimize(self._loss)
+            self._saver = tf.train.Saver()
 
     def _hidden_layer(self):
         self._lstm = {}
@@ -241,11 +242,11 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
         c_trans = tf.nn.tanh(tf.multiply(tf.transpose(c, [0, 1, 3, 2]), W_c))
 
         a = tf.matmul(tf.reshape(x_trans, [-1, self._time_steps, 1, self._num_features]), c_trans)
-        z = tf.nn.softmax(a, 3)
-        context = tf.matmul(z, c)
+        self._z = tf.nn.softmax(a, 3)
+        context = tf.matmul(self._z, c)
         self._context = tf.reshape(context, [-1, self._time_steps, self._num_features])
 
-    def fit(self, data_set, test_set):
+    def fit(self, data_set, test_set, event_type):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
@@ -290,6 +291,11 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                 if count > 9:
                     break
 
+        save_path = self._saver.save(self._sess,
+                                     "model/" + event_type + "_save_net" + time.strftime("%m-%d-%H-%M",
+                                                                                         time.localtime()) + ".ckpt")
+        print("Save to path: ", save_path)
+
     def predict(self, test_set):
         return self._sess.run(self._pred, feed_dict={self._x: test_set.dynamic_feature, self._v: self._template})
 
@@ -311,7 +317,9 @@ class ContextAttentionRNNWithOrigin(ContextAttentionRNN):
         mask, length = self._length()
         self._hidden, _ = tf.nn.bidirectional_dynamic_rnn(self._lstm['forward'],
                                                           self._lstm['backward'],
-                                                          tf.concat([self._context, self._x], 2),
+                                                          tf.contrib.layers.fully_connected(
+                                                              tf.concat([self._context, self._x], 2),
+                                                              self._num_features, activation_fn=tf.nn.relu),
                                                           sequence_length=length,
                                                           initial_state_fw=self._init_state['forward'],
                                                           initial_state_bw=self._init_state['backward'])
@@ -319,6 +327,14 @@ class ContextAttentionRNNWithOrigin(ContextAttentionRNN):
                                         axis=2)  # n_samples×time_steps×2lstm_size→n_samples×2lstm_size
         self._hidden_rep = tf.reduce_sum(self._hidden_concat, 1) / tf.tile(tf.reduce_sum(mask, 1, keep_dims=True),
                                                                            (1, self._lstm_size * 2))
+
+    def attention_analysis(self, test_dynamic):
+        # todo 输入为test_data，读取模型并返回attention权重
+        saver = tf.train.Saver()
+        saver.restore(self._sess, "model/cx_save_net05-19-05-05.ckpt")
+        prob = self._sess.run(self._pred, feed_dict={self._x: test_dynamic, self._v: self._template})
+        attention_signals = self._sess.run(self._z, feed_dict={self._x: test_dynamic, self._v: self._template})
+        return prob, attention_signals.reshape([-1, self._time_steps, 10])
 
 
 class LogisticRegression(object):
@@ -364,7 +380,7 @@ class LogisticRegression(object):
     def _hidden_layer(self):
         self._hidden_rep = self._x
 
-    def fit(self, data_set, test_set):
+    def fit(self, data_set, test_set, event_type):
         self._sess.run(tf.global_variables_initializer())
         data_set.epoch_completed = 0
 
@@ -428,4 +444,4 @@ class MultiLayerPerceptron(LogisticRegression):
                          max_loss, max_pace, lasso, ridge, optimizer, name)
 
     def _hidden_layer(self):
-        self._hidden_rep = tf.nn.relu(tf.contrib.layers.fully_connected(self._x, self._hidden_units))
+        self._hidden_rep = tf.contrib.layers.fully_connected(self._x, self._hidden_units, activation_fn=tf.nn.relu)
