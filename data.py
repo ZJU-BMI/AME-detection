@@ -65,28 +65,28 @@ class DataSet(object):
         self._epoch_completed = value
 
 
-def read_data(event_type):
-    # TODO 字符串改为constant
-    dynamic_features = pickle.load(open("resources/input_file_progress_notes.pkl", "rb"))
-    if event_type == "qx":
-        labels = pickle.load(open("resources/output_file_progress_notes_qx.pkl", "rb"))[:, -1].reshape([-1, 1])
-    elif event_type == "xycj":
-        labels = pickle.load(open("resources/output_file_progress_notes_xycj.pkl", "rb"))[:, -1].reshape([-1, 1])
-    else:
-        labels = pickle.load(open("resources/output_file_progress_notes_cx.pkl", "rb"))[:, -1].reshape([-1, 1])
-    return DataSet(dynamic_features, labels)
-
-
 # def read_data(event_type):
 #     # TODO 字符串改为constant
-#     dynamic_features = pickle.load(open("resources/input_file_admission_records.pkl", "rb"))
+#     dynamic_features = pickle.load(open("resources/input_file_progress_notes.pkl", "rb"))
 #     if event_type == "qx":
-#         labels = pickle.load(open("resources/output_file_admission_records_qx.pkl", "rb"))[:, -1].reshape([-1, 1])
+#         labels = pickle.load(open("resources/output_file_progress_notes_qx.pkl", "rb"))[:, -1].reshape([-1, 1])
 #     elif event_type == "xycj":
-#         labels = pickle.load(open("resources/output_file_admission_records_xycj.pkl", "rb"))[:, -1].reshape([-1, 1])
+#         labels = pickle.load(open("resources/output_file_progress_notes_xycj.pkl", "rb"))[:, -1].reshape([-1, 1])
 #     else:
-#         labels = pickle.load(open("resources/output_file_admission_records_cx.pkl", "rb"))[:, -1].reshape([-1, 1])
+#         labels = pickle.load(open("resources/output_file_progress_notes_cx.pkl", "rb"))[:, -1].reshape([-1, 1])
 #     return DataSet(dynamic_features, labels)
+
+
+def read_data(event_type):
+    # TODO 字符串改为constant
+    dynamic_features = pickle.load(open("resources/input_file_admission_records.pkl", "rb"))
+    if event_type == "qx":
+        labels = pickle.load(open("resources/output_file_admission_records_qx.pkl", "rb"))[:, -1].reshape([-1, 1])
+    elif event_type == "xycj":
+        labels = pickle.load(open("resources/output_file_admission_records_xycj.pkl", "rb"))[:, -1].reshape([-1, 1])
+    else:
+        labels = pickle.load(open("resources/output_file_admission_records_cx.pkl", "rb"))[:, -1].reshape([-1, 1])
+    return DataSet(dynamic_features, labels)
 
 
 if __name__ == "__main__":

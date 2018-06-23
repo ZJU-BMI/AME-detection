@@ -292,7 +292,7 @@ class ContextAttentionRNN(BidirectionalLSTMModel):
                     break
 
         save_path = self._saver.save(self._sess,
-                                     "model/" + event_type + "_save_net" + time.strftime("%m-%d-%H-%M",
+                                     "model/" + event_type + "_case1_save_net" + time.strftime("%m-%d-%H-%M",
                                                                                          time.localtime()) + ".ckpt")
         print("Save to path: ", save_path)
 
@@ -328,10 +328,10 @@ class ContextAttentionRNNWithOrigin(ContextAttentionRNN):
         self._hidden_rep = tf.reduce_sum(self._hidden_concat, 1) / tf.tile(tf.reduce_sum(mask, 1, keep_dims=True),
                                                                            (1, self._lstm_size * 2))
 
-    def attention_analysis(self, test_dynamic):
+    def attention_analysis(self, test_dynamic, model):
         # todo 输入为test_data，读取模型并返回attention权重
         saver = tf.train.Saver()
-        saver.restore(self._sess, "model/cx_save_net05-19-05-05.ckpt")
+        saver.restore(self._sess, "model/"+model)
         prob = self._sess.run(self._pred, feed_dict={self._x: test_dynamic, self._v: self._template})
         attention_signals = self._sess.run(self._z, feed_dict={self._x: test_dynamic, self._v: self._template})
         return prob, attention_signals.reshape([-1, self._time_steps, 10])

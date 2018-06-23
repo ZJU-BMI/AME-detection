@@ -113,8 +113,8 @@ def evaluate(test_index, y_label, y_score, file_name):
     tp_count = 1
     fn_count = 1
     tn_count = 1
-    sentence_set = load(open("resources/all_sentences_progress_notes.pkl", "rb"))
-    # sentence_set = load(open("resources/all_sentences_admission_records.pkl", "rb"))
+    # sentence_set = load(open("resources/all_sentences_progress_notes.pkl", "rb"))
+    sentence_set = load(open("resources/all_sentences_admission_records.pkl", "rb"))
     for j in range(len(y_label)):
         if y_label[j] == 0 and y_pred_label[j] == 1:  # FP
             write_result(j, test_index, y_label, y_score, y_pred_label, table, table_title, sentence_set, fp_sentences,
@@ -446,19 +446,34 @@ class ContextAttentionRNNWithOriginExperiments(LogisticRegressionExperiment):
         dynamic_feature = self._data_set.dynamic_feature
         labels = self._data_set.labels
         kf = sklearn.model_selection.StratifiedKFold(n_splits=ExperimentSetup.kfold, shuffle=False)
-
+        # models = ["qx_case1_save_net06-20-10-54.ckpt", "qx_case1_save_net06-20-10-58.ckpt",
+        #           "qx_case1_save_net06-20-11-03.ckpt", "qx_case1_save_net06-20-11-08.ckpt",
+        #           "qx_case1_save_net06-20-11-13.ckpt"]
+        # models = ["xycj_case1_save_net06-20-11-45.ckpt", "xycj_case1_save_net06-20-11-51.ckpt",
+        #           "xycj_case1_save_net06-20-11-56.ckpt", "xycj_case1_save_net06-20-12-01.ckpt",
+        #           "xycj_case1_save_net06-20-12-06.ckpt"]
+        models = ["cx_case1_save_net06-20-11-19.ckpt", "cx_case1_save_net06-20-11-24.ckpt",
+                  "cx_case1_save_net06-20-11-29.ckpt", "cx_case1_save_net06-20-11-35.ckpt",
+                  "cx_case1_save_net06-20-11-40.ckpt"]
         i_fold = 1
+        test_idx_tol = np.zeros(0,dtype=np.int32)
+        attention_signals_tol = np.zeros(shape=(0, 80, 10))
+        test_labels_tol = np.zeros([0,1])
+        pre_tol = np.zeros([0,1])
         for train_idx, test_idx in kf.split(X=dynamic_feature, y=labels.reshape(-1)):  # 五折交叉
-            if i_fold == 4:
-                test_dynamic = dynamic_feature[test_idx]
-                test_labels = labels[test_idx]
-                prob, attention_signals = self._model.attention_analysis(test_dynamic)
-                fpr, tpr, thresholds = roc_curve(test_labels, prob, pos_label=1)
-                threshold = thresholds[np.argmax(tpr - fpr)]
-                pre = (prob >= threshold) * 1
-                attention_write(attention_signals, test_idx, dynamic_feature.shape[1], test_labels, pre)
+            test_dynamic = dynamic_feature[test_idx]
+            test_labels = labels[test_idx]
+            prob, attention_signals = self._model.attention_analysis(test_dynamic, models[i_fold - 1])
+            fpr, tpr, thresholds = roc_curve(test_labels, prob, pos_label=1)
+            threshold = thresholds[np.argmax(tpr - fpr)]
+            pre = (prob >= threshold) * 1
+            attention_signals_tol = np.concatenate((attention_signals_tol, attention_signals))
+            test_idx_tol = np.concatenate((test_idx_tol, test_idx))
+            test_labels_tol = np.concatenate((test_labels_tol, test_labels))
+            pre_tol = np.concatenate((pre_tol, pre))
             i_fold += 1
         # break
+        attention_write(attention_signals_tol, test_idx_tol, dynamic_feature.shape[1], test_labels_tol, pre_tol)
         self._model.close()
         # TODO model中加attention_analysis函数，输入为test_data，读取模型并返回attention权重
         # TODO 实验部分写一个专门计算每个词注意力权重平均值的函数，并能写入excel
@@ -471,16 +486,58 @@ def attention_write(attention_signals, test_index, n_steps, labels, pre):
             attention_signals_shift[i_sample, j, j:j + 5] = attention_signals[i_sample, j, 0:5]
             attention_signals_shift[i_sample, j, j + 6:j + 11] = attention_signals[i_sample, j, 5:10]
     attention_signals_avg = np.sum(attention_signals_shift, 1)[:, 5:n_steps + 5] / 10
-    sentence_set = load(open("resources/all_sentences_progress_notes.pkl", "rb"))
-    workbook = xlsxwriter.Workbook("cx_1.4_attention.xlsx")
+    # sentence_set = load(open("resources/all_sentences_progress_notes.pkl", "rb"))
+    sentence_set = load(open("resources/all_sentences_admission_records.pkl", "rb"))
+    workbook = xlsxwriter.Workbook("cx_case1_all_attention1.xlsx")
     table = workbook.add_worksheet()
     i_row = 0
+    attention_words_fp = []
+    attention_words_tp = []
+    attention_words_fn = []
+    attention_words_tn = []
     for sample in range(len(test_index)):
+        # if labels[sample] == 1 and pre[sample] == 1:
+        # for step, word in enumerate(sentence_set[test_index[sample]]):
+        # table.write(3 * i_row, step, word)
+        # table.write(3 * i_row + 1, step, attention_signals_avg[sample, step])
+        if labels[sample] == 0 and pre[sample] == 1:
+            for step, word in enumerate(sentence_set[test_index[sample]]):
+                if attention_signals_avg[sample, step] >= 0.2:
+                    attention_words_fp.append(word)
         if labels[sample] == 1 and pre[sample] == 1:
             for step, word in enumerate(sentence_set[test_index[sample]]):
-                table.write(3 * i_row, step, word)
-                table.write(3 * i_row + 1, step, attention_signals_avg[sample, step])
-            i_row += 1
+                if attention_signals_avg[sample, step] >= 0.2:
+                    attention_words_tp.append(word)
+        if labels[sample] == 1 and pre[sample] == 0:
+            for step, word in enumerate(sentence_set[test_index[sample]]):
+                if attention_signals_avg[sample, step] >= 0.0:
+                    attention_words_fn.append(word)
+        if labels[sample] == 0 and pre[sample] == 0:
+            for step, word in enumerate(sentence_set[test_index[sample]]):
+                if attention_signals_avg[sample, step] >= 0.2:
+                    attention_words_tn.append(word)
+            # i_row += 1
+    words_fp = Counter(attention_words_fp).most_common()
+    words_tp = Counter(attention_words_tp).most_common()
+    words_fn = Counter(attention_words_fn).most_common()
+    words_tn = Counter(attention_words_tn).most_common()
+
+    for i, word_with_freq in enumerate(words_fp):
+        word, freq = word_with_freq
+        table.write(i + 1, 0, word)
+        table.write(i + 1, 1, freq)
+    for i, word_with_freq in enumerate(words_tp):
+        word, freq = word_with_freq
+        table.write(i + 1, 3, word)
+        table.write(i + 1, 4, freq)
+    for i, word_with_freq in enumerate(words_fn):
+        word, freq = word_with_freq
+        table.write(i + 1, 6, word)
+        table.write(i + 1, 7, freq)
+    for i, word_with_freq in enumerate(words_tn):
+        word, freq = word_with_freq
+        table.write(i + 1, 9, word)
+        table.write(i + 1, 10, freq)
     workbook.close()
 
 
@@ -504,12 +561,12 @@ if __name__ == '__main__':
         # ContextAttentionRNNExperiments(ischemia).do_experiments()
         # BidirectionalLSTMExperiments(ischemia).do_experiments()
         #
-        ContextAttentionRNNWithOriginExperiments(bleeding).do_experiments()
+        # ContextAttentionRNNWithOriginExperiments(bleeding).do_experiments()
         # ContextAttentionRNNExperiments(bleeding).do_experiments()
-        BidirectionalLSTMExperiments(bleeding).do_experiments()
+        # BidirectionalLSTMExperiments(bleeding).do_experiments()
 
         # ContextAttentionRNNWithOriginExperiments(revascularization).do_experiments()
         # ContextAttentionRNNExperiments(revascularization).do_experiments()
         # BidirectionalLSTMExperiments(revascularization).do_experiments()
 
-        # ContextAttentionRNNWithOriginExperiments(bleeding).attention_analysis()
+        ContextAttentionRNNWithOriginExperiments(bleeding).attention_analysis()
