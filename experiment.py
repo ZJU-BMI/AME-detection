@@ -9,18 +9,17 @@ import xlsxwriter
 from imblearn.over_sampling import SMOTE
 import numpy as np
 
-from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, roc_curve  # roc计算曲线
+from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, roc_curve
 from data import read_data, DataSet
-from models import BidirectionalLSTMModel, ContextAttentionRNN, LogisticRegression, MultiLayerPerceptron, \
-    ContextAttentionRNNWithOrigin
+from models import BidirectionalLSTMModel, ContextAttentionRNN, LogisticRegression, CNN, CACNN
 
 
 class ExperimentSetup(object):
-    # TODO 改
+
     kfold = 5
     batch_size = 128
     hidden_size = 128
-    epochs = 5
+    epochs = 20
     output_n_epochs = 1
 
     def __init__(self, learning_rate=0.01, max_loss=2.0, max_pace=0.01, lasso=0.0, ridge=0.0):
@@ -55,20 +54,17 @@ class ExperimentSetup(object):
         return self._learning_rate, self._max_loss, self._max_pace, self._lasso, self._ridge
 
 
-lr_qx_setup = ExperimentSetup(0.0001, 2, 0.0001, 0, 0.001)
-mlp_qx_setup = ExperimentSetup(0.0001, 2, 0.0001, 0, 0.001)
-bi_lstm_qx_setup = ExperimentSetup(0.01, 0.5, 0.01, 0, 0.001)
-ca_rnn_qx_setup = ExperimentSetup(0.01, 0.08, 0.008, 0, 0.001)
+lr_qx_setup = ExperimentSetup(0.01, 2, 0.0001, 0, 0.001)
+bi_lstm_qx_setup = ExperimentSetup(0.001, 0.5, 0.01, 0, 0.001)
+ca_rnn_qx_setup = ExperimentSetup(0.001, 0.08, 0.008, 0, 0.001)
 
-lr_xycj_setup = ExperimentSetup(0.0001, 2, 0.0001, 0, 0.001)
-mlp_xycj_setup = ExperimentSetup(0.0001, 2, 0.0001, 0, 0.001)
-bi_lstm_xycj_setup = ExperimentSetup(0.01, 0.5, 0.001, 0, 0.001)
-ca_rnn_xycj_setup = ExperimentSetup(0.01, 0.1, 0.0025, 0, 0.001)  # 继续调整
+lr_xycj_setup = ExperimentSetup(0.01, 2, 0.0001, 0, 0.001)
+bi_lstm_xycj_setup = ExperimentSetup(0.001, 0.5, 0.001, 0, 0.001)
+ca_rnn_xycj_setup = ExperimentSetup(0.001, 0.1, 0.0025, 0, 0.001)
 
-lr_cx_setup = ExperimentSetup(0.0001, 2, 0, 0, 0.001)
-mlp_cx_setup = ExperimentSetup(0.0001, 2, 0, 0, 0.001)
-bi_lstm_cx_setup = ExperimentSetup(0.01, 0.4, 0.04, 0, 0.001)  # 暂时不必改动
-ca_rnn_cx_setup = ExperimentSetup(0.01, 0.1, 0.0025, 0, 0.001)
+lr_cx_setup = ExperimentSetup(0.01, 2, 0, 0, 0.001)
+bi_lstm_cx_setup = ExperimentSetup(0.001, 0.4, 0.04, 0, 0.001)
+ca_rnn_cx_setup = ExperimentSetup(0.001, 0.1, 0.0025, 0, 0.001)
 
 
 def evaluate(test_index, y_label, y_score, file_name):
@@ -113,7 +109,7 @@ def evaluate(test_index, y_label, y_score, file_name):
     tp_count = 1
     fn_count = 1
     tn_count = 1
-    # sentence_set = load(open("resources/all_sentences_progress_notes.pkl", "rb"))
+    # sentence_set = load(open("resources/all_sentence_progress_note1.pkl", "rb"))
     sentence_set = load(open("resources/all_sentences_admission_records.pkl", "rb"))
     for j in range(len(y_label)):
         if y_label[j] == 0 and y_pred_label[j] == 1:  # FP
@@ -222,41 +218,6 @@ def plot_roc(test_labels, test_predictions, table, table_title, filename):
     return threshold
 
 
-def model_experiments(model, data_set, filename):
-    dynamic_feature = data_set.dynamic_feature
-    labels = data_set.labels
-    kf = sklearn.model_selection.StratifiedKFold(n_splits=ExperimentSetup.kfold, shuffle=True)
-
-    n_output = labels.shape[1]  # classes
-
-    tol_test_index = np.zeros(shape=0, dtype=np.int32)
-    tol_pred = np.zeros(shape=(0, n_output))
-    tol_label = np.zeros(shape=(0, n_output), dtype=np.int32)
-    i = 1
-    for train_idx, test_idx in kf.split(X=data_set.dynamic_feature, y=data_set.labels.reshape(-1)):  # 五折交叉
-        train_dynamic = dynamic_feature[train_idx]
-        train_y = labels[train_idx]
-        train_dynamic_res, train_y_res = imbalance_preprocess(train_dynamic, train_y)  # SMOTE过采样方法处理不平衡数据集
-
-        test_dynamic = dynamic_feature[test_idx]
-        test_y = labels[test_idx]
-
-        train_set = DataSet(train_dynamic_res.astype(np.float32), train_y_res)
-        test_set = DataSet(test_dynamic, test_y)
-
-        model.fit(train_set, test_set)
-
-        y_score = model.predict(test_set)
-
-        tol_test_index = np.concatenate((tol_test_index, test_idx))
-        tol_pred = np.vstack((tol_pred, y_score))
-        tol_label = np.vstack((tol_label, test_y))
-        print("Cross validation: {} of {}".format(i, ExperimentSetup.kfold),
-              time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-        i += 1
-    return evaluate(tol_test_index, tol_label, tol_pred, filename)
-
-
 def imbalance_preprocess(train_dynamic, train_y):  # SMOTE过采样
     """
     SMOTE处理不平衡数据集
@@ -302,9 +263,9 @@ class LogisticRegressionExperiment(object):
                                          ridge=ridge)
 
     def _check_path(self):
-        if not os.path.exists("result_" + self._event_type):
-            os.makedirs("result_" + self._event_type)
-        self._filename = "result_" + self._event_type + "/" + self._model.name + " " + time.strftime(
+        if not os.path.exists("average_result_cx_TEST" + self._event_type):
+            os.makedirs("average_result_cx_TEST" + self._event_type)
+        self._filename = "average_result_cx_TEST" + self._event_type + "/" + self._model.name + " " + time.strftime(
             "%Y-%m-%d-%H-%M-%S", time.localtime())
 
     def do_experiments(self):
@@ -341,31 +302,6 @@ class LogisticRegressionExperiment(object):
             i += 1
         evaluate(tol_test_index, tol_label, tol_pred, self._filename)
         self._model.close()
-
-
-class MultiLayerPercptronExperimrnt(LogisticRegressionExperiment):
-    def __init__(self, event_type):
-        super().__init__(event_type)
-
-    def _model_format(self):
-        if self._event_type == "qx":
-            learning_rate, max_loss, max_pace, lasso, ridge = mlp_qx_setup.all
-        elif self._event_type == "cx":
-            learning_rate, max_loss, max_pace, lasso, ridge = mlp_cx_setup.all
-        else:
-            learning_rate, max_loss, max_pace, lasso, ridge = mlp_xycj_setup.all
-        self._model = MultiLayerPerceptron(num_features=self._num_features,
-                                           time_steps=self._time_steps,
-                                           hidden_units=ExperimentSetup.hidden_size,
-                                           n_output=self._n_output,
-                                           batch_size=ExperimentSetup.batch_size,
-                                           epochs=ExperimentSetup.epochs,
-                                           output_n_epoch=ExperimentSetup.output_n_epochs,
-                                           learning_rate=learning_rate,
-                                           max_loss=max_loss,
-                                           max_pace=max_pace,
-                                           lasso=lasso,
-                                           ridge=ridge)
 
 
 class BidirectionalLSTMExperiments(LogisticRegressionExperiment):
@@ -417,35 +353,10 @@ class ContextAttentionRNNExperiments(LogisticRegressionExperiment):
                                           lasso=lasso,
                                           ridge=ridge)
 
-
-class ContextAttentionRNNWithOriginExperiments(LogisticRegressionExperiment):
-    def __init__(self, event_type):
-        super().__init__(event_type)
-
-    def _model_format(self):
-        if self._event_type == "qx":
-            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_qx_setup.all
-        elif self._event_type == "cx":
-            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_cx_setup.all
-        else:
-            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
-        self._model = ContextAttentionRNNWithOrigin(num_features=self._num_features,
-                                                    time_steps=self._time_steps,
-                                                    lstm_size=ExperimentSetup.hidden_size,
-                                                    n_output=self._n_output,
-                                                    batch_size=ExperimentSetup.batch_size,
-                                                    epochs=ExperimentSetup.epochs,
-                                                    output_n_epoch=ExperimentSetup.output_n_epochs,
-                                                    learning_rate=learning_rate,
-                                                    max_loss=max_loss,
-                                                    max_pace=max_pace,
-                                                    lasso=lasso,
-                                                    ridge=ridge)
-
     def attention_analysis(self):
         dynamic_feature = self._data_set.dynamic_feature
         labels = self._data_set.labels
-        kf = sklearn.model_selection.StratifiedKFold(n_splits=ExperimentSetup.kfold, shuffle=False)
+        kf = sklearn.model_selection.StratifiedKFold(n_splits=ExperimentSetup.kfold, shuffle=True)
         # models = ["qx_case1_save_net06-20-10-54.ckpt", "qx_case1_save_net06-20-10-58.ckpt",
         #           "qx_case1_save_net06-20-11-03.ckpt", "qx_case1_save_net06-20-11-08.ckpt",
         #           "qx_case1_save_net06-20-11-13.ckpt"]
@@ -456,10 +367,10 @@ class ContextAttentionRNNWithOriginExperiments(LogisticRegressionExperiment):
                   "cx_case1_save_net06-20-11-29.ckpt", "cx_case1_save_net06-20-11-35.ckpt",
                   "cx_case1_save_net06-20-11-40.ckpt"]
         i_fold = 1
-        test_idx_tol = np.zeros(0,dtype=np.int32)
+        test_idx_tol = np.zeros(0, dtype=np.int32)
         attention_signals_tol = np.zeros(shape=(0, 80, 10))
-        test_labels_tol = np.zeros([0,1])
-        pre_tol = np.zeros([0,1])
+        test_labels_tol = np.zeros([0, 1])
+        pre_tol = np.zeros([0, 1])
         for train_idx, test_idx in kf.split(X=dynamic_feature, y=labels.reshape(-1)):  # 五折交叉
             test_dynamic = dynamic_feature[test_idx]
             test_labels = labels[test_idx]
@@ -475,8 +386,25 @@ class ContextAttentionRNNWithOriginExperiments(LogisticRegressionExperiment):
         # break
         attention_write(attention_signals_tol, test_idx_tol, dynamic_feature.shape[1], test_labels_tol, pre_tol)
         self._model.close()
-        # TODO model中加attention_analysis函数，输入为test_data，读取模型并返回attention权重
-        # TODO 实验部分写一个专门计算每个词注意力权重平均值的函数，并能写入excel
+
+
+def dict_form(sentence_set, test_index, sample, attention_signals_avg, dict):
+    # dict_temp = {}
+    # for step, word in enumerate(sentence_set[test_index[sample]]):
+    #     if word in dict_temp:
+    #         dict_temp[word].append(attention_signals_avg[sample, step])
+    #     else:
+    #         dict_temp[word] = [attention_signals_avg[sample, step]]
+    # for (d, v) in dict_temp.items():
+    #     if d in dict:
+    #         dict[d].append(np.sum(dict_temp[d]))
+    #     else:
+    #         dict[d] = [np.sum(dict_temp[d])]
+    for step, word in enumerate(sentence_set[test_index[sample]]):
+        if word in dict:
+            dict[word].append(attention_signals_avg[sample, step])
+        else:
+            dict[word] = [attention_signals_avg[sample, step]]
 
 
 def attention_write(attention_signals, test_index, n_steps, labels, pre):
@@ -488,57 +416,98 @@ def attention_write(attention_signals, test_index, n_steps, labels, pre):
     attention_signals_avg = np.sum(attention_signals_shift, 1)[:, 5:n_steps + 5] / 10
     # sentence_set = load(open("resources/all_sentences_progress_notes.pkl", "rb"))
     sentence_set = load(open("resources/all_sentences_admission_records.pkl", "rb"))
-    workbook = xlsxwriter.Workbook("cx_case1_all_attention1.xlsx")
+    workbook = xlsxwriter.Workbook("cx_case1_attention_all_average.xlsx")
     table = workbook.add_worksheet()
-    i_row = 0
-    attention_words_fp = []
-    attention_words_tp = []
-    attention_words_fn = []
-    attention_words_tn = []
+    dict_fp = {}
+    dict_tp = {}
+    dict_fn = {}
+    dict_tn = {}
     for sample in range(len(test_index)):
-        # if labels[sample] == 1 and pre[sample] == 1:
-        # for step, word in enumerate(sentence_set[test_index[sample]]):
-        # table.write(3 * i_row, step, word)
-        # table.write(3 * i_row + 1, step, attention_signals_avg[sample, step])
         if labels[sample] == 0 and pre[sample] == 1:
-            for step, word in enumerate(sentence_set[test_index[sample]]):
-                if attention_signals_avg[sample, step] >= 0.2:
-                    attention_words_fp.append(word)
+            dict_form(sentence_set, test_index, sample, attention_signals_avg, dict_fp)
         if labels[sample] == 1 and pre[sample] == 1:
-            for step, word in enumerate(sentence_set[test_index[sample]]):
-                if attention_signals_avg[sample, step] >= 0.2:
-                    attention_words_tp.append(word)
+            dict_form(sentence_set, test_index, sample, attention_signals_avg, dict_tp)
         if labels[sample] == 1 and pre[sample] == 0:
-            for step, word in enumerate(sentence_set[test_index[sample]]):
-                if attention_signals_avg[sample, step] >= 0.0:
-                    attention_words_fn.append(word)
+            dict_form(sentence_set, test_index, sample, attention_signals_avg, dict_fn)
         if labels[sample] == 0 and pre[sample] == 0:
-            for step, word in enumerate(sentence_set[test_index[sample]]):
-                if attention_signals_avg[sample, step] >= 0.2:
-                    attention_words_tn.append(word)
-            # i_row += 1
-    words_fp = Counter(attention_words_fp).most_common()
-    words_tp = Counter(attention_words_tp).most_common()
-    words_fn = Counter(attention_words_fn).most_common()
-    words_tn = Counter(attention_words_tn).most_common()
+            dict_form(sentence_set, test_index, sample, attention_signals_avg, dict_tn)
 
-    for i, word_with_freq in enumerate(words_fp):
-        word, freq = word_with_freq
-        table.write(i + 1, 0, word)
-        table.write(i + 1, 1, freq)
-    for i, word_with_freq in enumerate(words_tp):
-        word, freq = word_with_freq
-        table.write(i + 1, 3, word)
-        table.write(i + 1, 4, freq)
-    for i, word_with_freq in enumerate(words_fn):
-        word, freq = word_with_freq
-        table.write(i + 1, 6, word)
-        table.write(i + 1, 7, freq)
-    for i, word_with_freq in enumerate(words_tn):
-        word, freq = word_with_freq
-        table.write(i + 1, 9, word)
-        table.write(i + 1, 10, freq)
+    for (d, v) in dict_fp.items():
+        dict_fp[d] = np.average(dict_fp[d])
+    dict_fp = sorted(dict_fp.items(), key=lambda d: d[1], reverse=True)
+    for (d, v) in dict_tp.items():
+        dict_tp[d] = np.average(dict_tp[d])
+    dict_tp = sorted(dict_tp.items(), key=lambda d: d[1], reverse=True)
+    for (d, v) in dict_fn.items():
+        dict_fn[d] = np.average(dict_fn[d])
+    dict_fn = sorted(dict_fn.items(), key=lambda d: d[1], reverse=True)
+    for (d, v) in dict_tn.items():
+        dict_tn[d] = np.average(dict_tn[d])
+    dict_tn = sorted(dict_tn.items(), key=lambda d: d[1], reverse=True)
+
+    for i, d in enumerate(dict_fp):
+        table.write(i + 1, 1, d[0])
+        table.write(i + 1, 2, d[1])
+    for i, d in enumerate(dict_tp):
+        table.write(i + 1, 4, d[0])
+        table.write(i + 1, 5, d[1])
+    for i, d in enumerate(dict_fn):
+        table.write(i + 1, 7, d[0])
+        table.write(i + 1, 8, d[1])
+    for i, d in enumerate(dict_tn):
+        table.write(i + 1, 10, d[0])
+        table.write(i + 1, 11, d[1])
     workbook.close()
+
+
+class CNNExperiments(LogisticRegressionExperiment):
+    def __init__(self, event_type):
+        super().__init__(event_type)
+
+    def _model_format(self):
+        if self._event_type == "qx":
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_qx_setup.all
+        elif self._event_type == "cx":
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_cx_setup.all
+        else:
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
+        self._model = CNN(num_features=self._num_features,
+                          time_steps=self._time_steps,
+                          lstm_size=ExperimentSetup.hidden_size,
+                          n_output=self._n_output,
+                          batch_size=ExperimentSetup.batch_size,
+                          epochs=ExperimentSetup.epochs,
+                          output_n_epoch=ExperimentSetup.output_n_epochs,
+                          learning_rate=learning_rate,
+                          max_loss=max_loss,
+                          max_pace=max_pace,
+                          lasso=lasso,
+                          ridge=ridge)
+
+
+class CACNNExperiments(LogisticRegressionExperiment):
+    def __init__(self, event_type):
+        super().__init__(event_type)
+
+    def _model_format(self):
+        if self._event_type == "qx":
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_qx_setup.all
+        elif self._event_type == "cx":
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_cx_setup.all
+        else:
+            learning_rate, max_loss, max_pace, lasso, ridge = ca_rnn_xycj_setup.all
+        self._model = CACNN(num_features=self._num_features,
+                            time_steps=self._time_steps,
+                            lstm_size=ExperimentSetup.hidden_size,
+                            n_output=self._n_output,
+                            batch_size=ExperimentSetup.batch_size,
+                            epochs=ExperimentSetup.epochs,
+                            output_n_epoch=ExperimentSetup.output_n_epochs,
+                            learning_rate=learning_rate,
+                            max_loss=max_loss,
+                            max_pace=max_pace,
+                            lasso=lasso,
+                            ridge=ridge)
 
 
 if __name__ == '__main__':
@@ -547,26 +516,32 @@ if __name__ == '__main__':
     bleeding = "cx"
     revascularization = "xycj"
 
-    for i in range(1):
+    for i in range(5):
         # LogisticRegressionExperiment(ischemia).do_experiments()
         # MultiLayerPercptronExperimrnt(ischemia).do_experiments()
-
+        #
         # LogisticRegressionExperiment(bleeding).do_experiments()
         # MultiLayerPercptronExperimrnt(bleeding).do_experiments()
-
+        #
         # LogisticRegressionExperiment(revascularization).do_experiments()
         # MultiLayerPercptronExperimrnt(revascularization).do_experiments()
 
-        # ContextAttentionRNNWithOriginExperiments(ischemia).do_experiments()
-        # ContextAttentionRNNExperiments(ischemia).do_experiments()
+        ContextAttentionRNNExperiments(ischemia).do_experiments()
         # BidirectionalLSTMExperiments(ischemia).do_experiments()
-        #
-        # ContextAttentionRNNWithOriginExperiments(bleeding).do_experiments()
-        # ContextAttentionRNNExperiments(bleeding).do_experiments()
+
+        ContextAttentionRNNExperiments(bleeding).do_experiments()
         # BidirectionalLSTMExperiments(bleeding).do_experiments()
 
-        # ContextAttentionRNNWithOriginExperiments(revascularization).do_experiments()
-        # ContextAttentionRNNExperiments(revascularization).do_experiments()
+        ContextAttentionRNNExperiments(revascularization).do_experiments()
         # BidirectionalLSTMExperiments(revascularization).do_experiments()
 
-        ContextAttentionRNNWithOriginExperiments(bleeding).attention_analysis()
+        # ContextAttentionRNNWithOriginExperiments(revascularization).do_experiments()
+        # ContextAttentionRNNWithOriginExperiments(bleeding).do_experiments()
+
+        # CNNExperiments(ischemia).do_experiments()
+        # CNNExperiments(revascularization).do_experiments()
+        # CNNExperiments(bleeding).do_experiments()
+        #
+        # CACNNExperiments(ischemia).do_experiments()
+        # CACNNExperiments(revascularization).do_experiments()
+        # CACNNExperiments(bleeding).do_experiments()
